@@ -1,0 +1,61 @@
+{
+  "target": "203.0.113.5",
+  "hostname": "example.com",
+  "ports": [80, 443, 8080],
+  "version": "0.2.0",
+  "timestamp": "2024-01-01T00:00:00Z",
+  "open_ports": [80, 443],
+  "http_checks": {
+    "80": {
+      "url": "http://example.com",
+      "status_code": 200,
+      "server_headers": {
+        "Content-Type": "text/html",
+        "Content-Security-Policy": "default-src 'self'"
+      },
+      "body_snippet": "<!doctype html>...",
+      "cookie_flags": {
+        "secure": false,
+        "httponly": true
+      },
+      "security_headers_check": {
+        "present": {
+          "Content-Security-Policy": "default-src 'self'"
+        },
+        "missing": [
+          "Strict-Transport-Security",
+          "X-Content-Type-Options"
+        ]
+      }
+    }
+  },
+  "tls_cert": {
+    "subject": {"commonName": "example.com"},
+    "issuer": {"commonName": "Example CA"},
+    "notBefore": "Jan  1 00:00:00 2024 GMT",
+    "notAfter": "Dec 31 23:59:59 2024 GMT",
+    "serialNumber": "01AABBCCDD"
+  },
+  "robots": {
+    "url": "https://example.com/robots.txt",
+    "body": "User-agent: *\nDisallow: /private"
+  },
+  "findings": [
+    {
+      "port": 80,
+      "issue": "missing_security_headers",
+      "details": [
+        "Strict-Transport-Security",
+        "X-Content-Type-Options"
+      ]
+    },
+    {
+      "port": 80,
+      "issue": "session_cookie_flags",
+      "details": {
+        "secure": false,
+        "httponly": true
+      }
+    }
+  ]
+}
