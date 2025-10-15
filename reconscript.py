@@ -179,11 +179,20 @@ def main(args):
     else:
         print(json.dumps(out, indent=2))
 
-if __name__ == "__main__":
+def build_arg_parser():
     parser = argparse.ArgumentParser(description="Safe reconnaissance for in-scope host")
     parser.add_argument("--target", required=True, help="IP address to scan (required by scope)")
     parser.add_argument("--hostname", required=False, help="optional hostname for HTTP/S SNI")
     parser.add_argument("--outfile", help="filename to write JSON results")
     parser.add_argument("--ports", nargs="+", type=int, default=COMMON_PORTS, help="ports to scan")
-    args = parser.parse_args()
+    return parser
+
+
+def cli(argv=None):
+    parser = build_arg_parser()
+    args = parser.parse_args(argv)
     main(args)
+
+
+if __name__ == "__main__":
+    cli()
