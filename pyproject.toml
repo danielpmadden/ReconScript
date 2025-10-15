@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "reconscript"
+version = "0.1.0"
+description = "Safe reconnaissance helper for authorized assessments only; use responsibly within agreed scope."
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+  {name = "Safe Recon Team", email = "security@example.com"}
+]
+dependencies = [
+  "requests>=2.25"
+]
+keywords = ["reconnaissance", "security", "safety"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Intended Audience :: Information Technology",
+  "Topic :: Security",
+  "Development Status :: 4 - Beta"
+]
+
+[project.urls]
+Homepage = "https://example.com/reconscript"
+Repository = "https://example.com/reconscript/repo"
+
+[project.scripts]
+safe-recon = "recon_script:cli"
+
+[tool.setuptools]
+py-modules = ["recon_script", "reconscript"]
