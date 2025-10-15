@@ -3,12 +3,12 @@
 ReconScript is a lightweight, non-destructive reconnaissance helper for reviewing an in-scope web application. It focuses on safe actions like TCP connect scans, HTTP(S) GET requests, TLS certificate inspection, and fetching `robots.txt`, producing a single JSON report you can hand to your engagement notes.
 
 ## Features
-- 🔍 **Common port discovery** using TCP connect scans (defaults to 80, 443, 8080, 8443, 8000, and 3000).
-- 🌐 **HTTP(S) probing** that follows redirects, records response metadata, and captures a short body snippet for context.
-- 🛡️ **Security header review** highlighting recommended headers that are present or missing.
-- 🍪 **Cookie flag inspection** for Secure and HttpOnly protections when the server sets cookies.
-- 🔐 **TLS certificate grab** (when HTTPS ports are open) with issuer, subject, validity, and serial number details.
-- 🤖 **`robots.txt` fetcher** to capture any crawler directives exposed by the site.
+- **Common port discovery** using TCP connect scans (defaults to 80, 443, 8080, 8443, 8000, and 3000).
+- **HTTP(S) probing** that follows redirects, records response metadata, and captures a short body snippet for context.
+- **Security header review** highlighting recommended headers that are present or missing.
+- **Cookie flag inspection** for Secure and HttpOnly protections when the server sets cookies.
+- **TLS certificate grab** (when HTTPS ports are open) with issuer, subject, validity, and serial number details.
+- **`robots.txt` fetcher** to capture any crawler directives exposed by the site.
 
 ## Requirements
 - Python 3.8+
@@ -53,6 +53,3 @@ The script prints (or writes) JSON containing:
 - Designed for **consent-based** testing only. Always confirm the scope and authorization before running.
 - Uses only safe, read-only network interactions and adheres to engagement-friendly defaults.
 - Modify the port list or HTTP headers only when the agreed scope permits.
-
-## Contributing
-Pull requests and issue reports are welcome! Please describe the scenario, expected behaviour, and your environment details so maintainers can reproduce your findings.
