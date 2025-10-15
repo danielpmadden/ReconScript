@@ -5,7 +5,7 @@ application assessments. It performs a concise series of **read-only checks** to
 catalogue exposed services, review HTTP security posture, and capture
 supporting evidence in a single JSON report.
 
-> ⚠️ ReconScript is expressly intended for ethical security reviews conducted
+> ReconScript is expressly intended for ethical security reviews conducted
 > with explicit permission. Always confirm scope and comply with applicable
 > laws, engagement rules, and rate limits.
 
