@@ -1,90 +1,205 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/Language-Python_3.9–3.13-blue?logo=python&logoColor=white" alt="Python">
+  <img src="https://img.shields.io/badge/Language-Python_3.9–3.13-blue?logo=python&logoColor=white" alt="Python 3.9–3.13">
   <img src="https://img.shields.io/badge/Framework-Flask-green?logo=flask&logoColor=white" alt="Flask">
-  <img src="https://img.shields.io/badge/UI-HTML_+_JS-orange?logo=html5&logoColor=white" alt="HTML/JS">
-  <img src="https://img.shields.io/badge/Build-Docker_+_Compose-2496ED?logo=docker&logoColor=white" alt="Docker">
-  <img src="https://img.shields.io/badge/License-MIT-yellow?logo=open-source-initiative&logoColor=white" alt="License">
-  <img src="https://img.shields.io/badge/Status-Active-success?logo=git&logoColor=white" alt="Status">
-</p>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/OS-Windows_|_Linux_|_macOS-lightgrey?logo=windows&logoColor=white" alt="OS">
-  <img src="https://img.shields.io/badge/CLI-Compatible-critical?logo=console&logoColor=white" alt="CLI">
-  <img src="https://img.shields.io/badge/Web_UI-Enabled-brightgreen?logo=google-chrome&logoColor=white" alt="Web UI">
+  <img src="https://img.shields.io/badge/UI-Web_UI-orange?logo=html5&logoColor=white" alt="Web UI">
+  <img src="https://img.shields.io/badge/License-MIT-yellow?logo=open-source-initiative&logoColor=white" alt="MIT License">
+  <img src="https://img.shields.io/github/v/release/YOUR_GITHUB_USERNAME/ReconScript?label=Version" alt="Latest Version">
+  <img src="https://img.shields.io/github/last-commit/YOUR_GITHUB_USERNAME/ReconScript?label=Last%20Commit" alt="Last Commit">
 </p>
 
 # ReconScript
 
-ReconScript is a friendly reconnaissance toolkit for authorised defenders, blue teams, and application owners. It performs **read-only** discovery against targets you are permitted to assess, then produces clean HTML/Markdown/JSON/PDF reports that are easy to share internally or with stakeholders.
+*Safe, automated reconnaissance with clean reporting for authorized assessments.*
 
-> **Authorised use only.** Always obtain written permission before scanning, obey engagement scope and rate limits, and comply with local laws. ReconScript is designed for defensive validation, not intrusion.
+> ReconScript is a modern, non-destructive reconnaissance and reporting framework built for defenders, red teams on scoped engagements, and compliance-focused assessments. It automates TCP connect discovery, HTTP/TLS metadata collection, robots.txt/header reviews, and compiles professional-grade HTML, Markdown, JSON, or PDF reports—without intrusive exploitation.
 
-## Quick Start
+<p align="center">
+  <img src="https://via.placeholder.com/1200x650.png?text=ReconScript+Web+UI" alt="ReconScript Web UI preview">
+</p>
 
-### One-click launcher
-- **macOS / Linux:** run `./start.sh`
-- **Windows:** double-click `start.bat`
-- The launcher creates a virtual environment (when needed), installs pinned dependencies from `requirements.txt`, starts the Flask UI, waits for the `/health` endpoint to turn green, and opens <http://127.0.0.1:5000/> automatically. Live logs stream to `results/latest.log`.
+---
 
-### Python workflow
+## 🛰️ Project Overview
+
+- **Automated, safe reconnaissance** covering HTTP, HTTPS, TLS metadata, robots.txt, headers, and more using read-only probes.
+- **Multi-format reporting** delivered as HTML dashboards, machine-friendly JSON, clean Markdown, or PDF exports.
+- **Flexible deployments** that run locally or in Docker with a polished web interface for managing scans and reports.
+- **Ethical-by-design** workflows that reinforce permission-based, legitimate testing practices.
+
+---
+
+## 🚀 Key Features
+
+- **🛡️ Safe & Read-Only Scanning:** TCP connect probes with HTTP/TLS inspection—no intrusive exploits or payloads.
+- **🖥️ Web-Based UI:** Launch scans, follow live progress, and open reports directly from your browser.
+- **📝 Multiple Output Formats:** Export findings to HTML, JSON, Markdown, or PDF to match stakeholder needs.
+- **🧭 Cross-Platform:** Works on Windows, macOS, Linux, or packaged Docker containers.
+- **⚡ One-Click Start:** `start.sh`, `start.bat`, or `docker compose up` bootstraps the full stack instantly.
+- **🌐 Auto Browser Launch:** Automatically opens the UI once the service is ready.
+- **🗃️ Versioned Reports:** Timestamped report directories saved under `/results` for easy audit trails.
+- **📜 Rich Logging:** Colorized terminal output with timestamps for transparent activity tracking.
+- **🔌 Extensible Design:** Modular architecture poised for plugins, integrations, and advanced automations.
+
+---
+
+## 🧰 Tech Stack
+
+- **Language:** Python 3.9–3.13
+- **Framework:** Flask
+- **Frontend:** HTML, CSS, JavaScript
+- **Reporting:** WeasyPrint (PDF export)
+- **Containerization:** Docker & Docker Compose
+- **Formatting / Logging:** Rich, Tabulate, Jinja2
+
+---
+
+## 📦 Installation
+
+### Option 1 — Quick Start (One Click)
 ```bash
-python3 start.py
+git clone https://github.com/YOUR_GITHUB_USERNAME/ReconScript.git
+cd ReconScript
+./start.sh
 ```
-- Uses `.env` (if present) for defaults such as `DEFAULT_PORT` or `RESULTS_DIR`.
-- Auto-detects Docker, WSL, or bare-metal environments and selects the right host binding.
-- Opens the ReconScript dashboard in your default browser once the health check passes.
+Then open → <http://127.0.0.1:5000>
 
-### Docker
+### Option 2 — Windows
+```powershell
+git clone https://github.com/YOUR_GITHUB_USERNAME/ReconScript.git
+cd ReconScript
+start.bat
+```
+
+### Option 3 — Docker
 ```bash
-docker compose up --build
-# or manually
-# docker build -t reconscript .
-# docker run --rm -p 5000:5000 -v "$(pwd)/results:/app/results" reconscript
+docker compose up
 ```
-Docker images honour the same `.env` settings. Reports appear under the mounted `results/` directory and are also accessible via `/results` in the UI.
-
-## Example commands
-- Launch a quick localhost scan from the UI: use the “Quick Test” button (127.0.0.1 on ports 3000 & 443).
-- Generate a Markdown report via CLI:
-  ```bash
-  reconscript --target 203.0.113.5 --ports 80 443 8080 --format markdown
-  ```
-- Export PDF without network activity (dry run):
-  ```bash
-  reconscript --target example.org --dry-run --pdf
-  ```
-- Install/update dependencies explicitly:
-  ```bash
-  python install_dependencies.py
-  ```
-
-## Web dashboard
-- Automatic readiness polling with a “Preparing scan engine…” status indicator.
-- Live progress via Server-Sent Events and a Rich-styled console log.
-- Report library at `/results` serving HTML reports directly from the `results/` folder.
-
-## CLI overview
-A concise flag summary lives in [HELP.md](HELP.md). Highlights:
-- `--target` (required): approved IPv4/IPv6 target.
-- `--hostname`: override HTTP Host/TLS SNI.
-- `--ports`: space-separated ports or ranges.
-- `--format` / `--pdf`: control report format.
-- `--dry-run`, `--throttle`, `--enable-ipv6`, `--verbose`/`--quiet` for runtime tuning.
-
-All reports are saved beneath the configured `RESULTS_DIR` (default `results/`). The CLI and UI share the same scanning engine and Rich-formatted logging.
-
-## Configuration
-ReconScript reads optional defaults from `.env`:
+or
+```bash
+docker build -t reconscript .
+docker run --rm -p 5000:5000 -v ${PWD}/results:/app/results reconscript
 ```
+
+---
+
+## ⚙️ Usage
+
+### From the Web UI
+1. Enter the authorized target IP or hostname.
+2. *(Optional)* Specify ports (default: 80, 443, 8080, 8443, 8000, 3000).
+3. Choose the desired output format.
+4. Click **Run Scan** and follow live progress updates.
+5. Retrieve reports from the **Reports** tab or from the `/results` directory.
+
+### From the Command Line
+```bash
+python -m reconscript --target 127.0.0.1 --ports 80 443 8080 --format html
+```
+
+---
+
+## 🧱 Architecture Overview
+
+- `core.py`: TCP and HTTP reconnaissance engine.
+- `scanner.py`: Probe orchestration with retries and throttling.
+- `report.py`: Structured report assembly for HTML, JSON, Markdown, and PDF.
+- `ui.py`: Flask-driven web interface and REST endpoints.
+- `templates/`: Jinja2 templates backing dashboards and reports.
+- `static/`: JavaScript, CSS, and supporting assets.
+- `start.py`: Smart launcher detecting local, Docker, or WSL environments.
+- `install_dependencies.py`: Dependency bootstrapper.
+
+```
+ ┌──────────────────────┐
+ │  Web UI (Flask)      │
+ │   └── UI routes      │
+ ├──────────────────────┤
+ │  Recon Engine        │
+ │   ├── TCP scanner    │
+ │   ├── HTTP analyzer  │
+ │   └── Report builder │
+ ├──────────────────────┤
+ │  Output Formats      │
+ │   ├── HTML / JSON    │
+ │   ├── Markdown / PDF │
+ └──────────────────────┘
+```
+
+---
+
+## 📈 Example Output
+
+```text
+Scan Summary
+PORT | SERVICE  | STATUS | NOTES
+-----+----------+--------+------------------------------
+80   | HTTP     | open   | missing security headers
+443  | HTTPS    | open   | TLS certificate valid
+8080 | HTTP-alt | closed | filtered or no response
+```
+
+---
+
+## 🔍 Example Targets (Safe)
+
+Use only approved or demonstration systems:
+
+- <https://scanme.nmap.org>
+- <https://example.com>
+- Local lab environments (e.g., `127.0.0.1`, Docker containers)
+
+---
+
+## 🧠 Advanced Configuration
+
+`.env` overrides core defaults:
+```ini
 DEFAULT_PORT=5000
 RESULTS_DIR=results
+ENABLE_IPV6=true
 ```
-Additional environment variables (for example `RUNNING_IN_DOCKER=1`) can help the launcher detect containerised deployments.
 
-## Troubleshooting
-- **Dependencies missing:** rerun `python install_dependencies.py --force`.
-- **PDF export fails in Docker:** ensure Cairo/Pango libraries are installed; the provided Dockerfile already includes them.
-- **Browser did not open:** when running in Docker the launcher prints the URL instead of auto-opening. In WSL, install `wslview` for seamless launching.
+- `install_dependencies.py` ensures required libraries are present.
+- `requirements.txt` and `pyproject.toml` define deterministic dependency sets.
 
-## Help
-- [HELP.md](HELP.md) contains detailed CLI usage examples.
+---
+
+## 📜 License & Legal Disclaimer
+
+- Licensed under the **MIT License**.
+- Designed strictly for **authorized, ethical security testing**.
+- **Do not** scan systems without explicit written permission from the owner.
+
+---
+
+## 🧩 Contributing
+
+We welcome ideas, bug reports, and pull requests:
+
+1. Fork the repository.
+2. Create a feature branch (`git checkout -b feature/amazing-improvement`).
+3. Follow PEP 8 formatting, use Black for formatting, and ensure unit tests (`pytest`) pass.
+4. Open a pull request describing your changes and validation.
+
+Continuous Integration is configured to lint, test, and validate builds automatically.
+
+---
+
+## 🧭 Roadmap
+
+- Shodan / Censys enrichment integrations.
+- Background scan queue for scheduled assessments.
+- Remote API mode for automation pipelines.
+- Authentication and RBAC for shared web UIs.
+
+---
+
+## 👥 Credits
+
+- **Author:** Daniel Madden
+- **Frameworks:** Flask, Rich, WeasyPrint
+- **Inspiration:** OWASP Juice Shop, Nmap, RapidRecon
+
+---
+
+ReconScript keeps reconnaissance ethical, auditable, and production-ready—empowering defenders with the context they need without crossing the line.
