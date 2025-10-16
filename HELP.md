@@ -72,3 +72,63 @@ Authorized targets only. No intrusive actions. Throttled by default.
 
 ## Credits
 Author Daniel Madden  Version 0.4.0  License MIT
+
+## Post-Merge Runbook
+
+## Quick Start
+**Windows:**
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install --no-deps .[dev]
+py -m reconscript --target 127.0.0.1 --ports 3000
+```
+
+**macOS/Linux:**
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install --no-deps .[dev]
+python3 -m reconscript --target 127.0.0.1 --ports 3000
+```
+
+The report auto-opens in your browser (`results/scan-YYYYMMDD-HHMMSS.html`).
+
+---
+
+## Web UI
+```bash
+python web_ui.py
+```
+Then visit:  
+➡ http://127.0.0.1:5000/
+
+Enter:
+- Target (default: 127.0.0.1)
+- Ports (space-separated)
+- Format (HTML/JSON/MD)
+
+Click **Run Scan** → the HTML report opens when complete.
+
+---
+
+## Docker Demo
+```bash
+docker-compose up
+```
+Starts OWASP Juice Shop (port 3000) + ReconScript UI on port 5000.  
+Reports stored under `./results/`.
+
+To include PDF:
+```bash
+docker build --build-arg INCLUDE_PDF=true -t reconscript:pdf .
+```
+
+---
+
+## Testing
+```bash
+pytest -q
+```
+✅ All tests pass or skip gracefully (PDF skipped if GTK missing).
+
+---

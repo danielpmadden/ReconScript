@@ -68,6 +68,56 @@ def test_main_respects_format_flag(tmp_path):
     mock_writer.assert_called_once_with(report, outfile, "html")
 
 
+def test_main_defaults_to_html_and_opens_browser(tmp_path):
+    report = {
+        "ports": [80],
+        "open_ports": [80],
+        "findings": [],
+        "started_at": "2024-05-01T12:00:00Z",
+        "runtime": {"duration": 1.5},
+    }
+    auto_path = tmp_path / "results" / "scan.html"
+    with (
+        mock.patch("reconscript.cli.run_recon", return_value=report),
+        mock.patch("reconscript.cli.write_report", return_value=(auto_path, "html")) as mock_writer,
+        mock.patch("reconscript.cli.Console") as mock_console,
+        mock.patch("reconscript.cli.webbrowser.open", return_value=True) as mock_open,
+        mock.patch("reconscript.cli._derive_default_outfile", return_value=auto_path),
+    ):
+        console_instance = mock.Mock()
+        console_instance.print = mock.Mock()
+        mock_console.return_value = console_instance
+        exit_code = cli.main(["--target", "127.0.0.1"])
+
+    assert exit_code == 0
+    mock_writer.assert_called_once_with(report, auto_path, "html")
+    mock_open.assert_called_once()
+
+
+def test_main_respects_no_browser_flag(tmp_path):
+    report = {
+        "ports": [80],
+        "open_ports": [80],
+        "findings": [],
+        "started_at": "2024-05-01T12:00:00Z",
+        "runtime": {"duration": 1.5},
+    }
+    auto_path = tmp_path / "results" / "scan.html"
+    with (
+        mock.patch("reconscript.cli.run_recon", return_value=report),
+        mock.patch("reconscript.cli.write_report", return_value=(auto_path, "html")),
+        mock.patch("reconscript.cli.Console") as mock_console,
+        mock.patch("reconscript.cli.webbrowser.open") as mock_open,
+        mock.patch("reconscript.cli._derive_default_outfile", return_value=auto_path),
+    ):
+        console_instance = mock.Mock()
+        console_instance.print = mock.Mock()
+        mock_console.return_value = console_instance
+        cli.main(["--target", "127.0.0.1", "--no-browser"])
+
+    mock_open.assert_not_called()
+
+
 def _response(url: str, status: int = 200, body: str = "", headers: dict[str, str] | None = None) -> Response:
     resp = Response()
     resp.status_code = status

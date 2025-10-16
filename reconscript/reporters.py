@@ -11,7 +11,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
-TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
+PACKAGE_DIR = Path(__file__).resolve().parent
+PROJECT_TEMPLATES = PACKAGE_DIR.parent / "templates"
+PACKAGE_TEMPLATES = PACKAGE_DIR / "templates"
+TEMPLATE_DIRS = [path for path in (PROJECT_TEMPLATES, PACKAGE_TEMPLATES) if path.exists()]
 HTML_TEMPLATE_NAME = "report.html"
 
 try:  # pragma: no cover - optional dependency may be unavailable in CI
@@ -22,14 +25,16 @@ except Exception:  # pragma: no cover - fallback for minimal environments
     select_autoescape = None  # type: ignore[assignment]
     _JINJA_ENV: Optional[Environment] = None
 else:  # pragma: no cover - exercised when Jinja2 installed
+    loader_paths = [str(path) for path in TEMPLATE_DIRS] or [str(PACKAGE_TEMPLATES)]
     _JINJA_ENV = Environment(
-        loader=FileSystemLoader(str(TEMPLATE_DIR)),
+        loader=FileSystemLoader(loader_paths),
         autoescape=select_autoescape(["html", "xml"]),
     )
 
 from . import __version__
 
 LOGGER = logging.getLogger(__name__)
+PDF_FALLBACK_MESSAGE = "PDF dependencies not found — served HTML version instead."
 
 
 def render_json(data: Dict[str, object]) -> str:
@@ -124,19 +129,13 @@ def generate_pdf(html_path: Path, pdf_path: Path) -> Tuple[Path, bool]:
     try:  # pragma: no cover - exercised indirectly via integration tests
         from weasyprint import HTML
     except ImportError as exc:
-        LOGGER.warning(
-            "PDF export unavailable: %s; falling back to HTML. Use browser Print→Save as PDF or install GTK runtime / use Docker with INCLUDE_PDF=true.",
-            exc,
-        )
+        LOGGER.warning("%s Install via 'pip install .[pdf]' or rebuild with INCLUDE_PDF=true. (%s)", PDF_FALLBACK_MESSAGE, exc)
         return html_path.resolve(), False
 
     try:
         HTML(filename=str(html_path)).write_pdf(str(pdf_path))
     except OSError as exc:
-        LOGGER.warning(
-            "PDF export unavailable: %s; falling back to HTML. Use browser Print→Save as PDF or install GTK runtime / use Docker with INCLUDE_PDF=true.",
-            exc,
-        )
+        LOGGER.warning("%s Install via 'pip install .[pdf]' or rebuild with INCLUDE_PDF=true. (%s)", PDF_FALLBACK_MESSAGE, exc)
         return html_path.resolve(), False
 
     return pdf_path.resolve(), True
@@ -198,8 +197,14 @@ def _build_template_context(data: Dict[str, object]) -> Dict[str, object]:
     timestamp_raw = str(data.get("timestamp", datetime.utcnow().isoformat() + "Z"))
     findings = data.get("findings", [])
     findings_count = len(findings) if isinstance(findings, Sequence) else 0
+    runtime = data.get("runtime") if isinstance(data.get("runtime"), dict) else {}
     summary_rows = _summary_rows(data)
     recommendations = _build_recommendations(findings)
+    duration_value = runtime.get("duration") if isinstance(runtime, dict) else None
+    if isinstance(duration_value, (int, float)):
+        duration_display = f"{duration_value:.2f}"
+    else:
+        duration_display = None
 
     return {
         "title": f"ReconScript Report — {data.get('target', 'unknown')}",
@@ -213,6 +218,8 @@ def _build_template_context(data: Dict[str, object]) -> Dict[str, object]:
         "version": data.get("version", __version__),
         "generated_human": _format_human_date(timestamp_raw),
         "findings_count": findings_count,
+        "runtime": runtime,
+        "runtime_duration": duration_display,
     }
 
 
@@ -221,7 +228,8 @@ def _summary_rows(data: Dict[str, object]) -> List[Tuple[str, str]]:
     open_ports = _format_list(data.get("open_ports", [])) or "None detected"
     findings = data.get("findings", [])
     findings_count = len(findings) if isinstance(findings, Sequence) else 0
-    duration = data.get("duration")
+    runtime = data.get("runtime") if isinstance(data.get("runtime"), dict) else {}
+    duration = runtime.get("duration") if isinstance(runtime, dict) else data.get("duration")
 
     rows: List[Tuple[str, str]] = [
         ("Target", str(data.get("target", "unknown"))),
@@ -232,7 +240,10 @@ def _summary_rows(data: Dict[str, object]) -> List[Tuple[str, str]]:
     ]
 
     if duration is not None:
-        rows.append(("Scan Duration", str(duration)))
+        if isinstance(duration, (int, float)):
+            rows.append(("Scan Duration", f"{duration:.2f} seconds"))
+        else:
+            rows.append(("Scan Duration", str(duration)))
 
     return rows
 
@@ -255,6 +266,19 @@ def _metadata_entries(data: Dict[str, object], timestamp: str) -> List[Tuple[str
         ("Tool Version", str(data.get("version", __version__))),
         ("Report Generated", timestamp),
     ]
+
+    runtime = data.get("runtime") if isinstance(data.get("runtime"), dict) else {}
+    if isinstance(runtime, dict):
+        if runtime.get("started_at"):
+            entries.append(("Scan Started", str(runtime["started_at"])))
+        if runtime.get("completed_at"):
+            entries.append(("Scan Completed", str(runtime["completed_at"])))
+        if runtime.get("duration") is not None:
+            duration_value = runtime.get("duration")
+            if isinstance(duration_value, (int, float)):
+                entries.append(("Scan Duration", f"{duration_value:.2f} seconds"))
+            else:
+                entries.append(("Scan Duration", str(duration_value)))
 
     cli_args = data.get("cli_args")
     if cli_args:

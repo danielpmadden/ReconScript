@@ -1,27 +1,31 @@
-<!-- # Modified by codex: 2024-05-08 -->
-# ReconScript Demonstration Guide
+# ReconScript Demo Checklist
 
-## Quick CLI run (HTML auto-open)
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install --no-deps .
-python -m reconscript --target 127.0.0.1 --ports 3000 --format html --outfile results/demo.html
-```
-The CLI writes `results/demo.html` and automatically opens it in your default browser. Disable the
-browser step with `--no-browser`.
+1. **CLI HTML run**
+   ```bash
+   python3 -m venv .venv && source .venv/bin/activate
+   pip install --no-deps .[dev]
+   python -m reconscript --target 127.0.0.1 --ports 3000
+   ```
+   - Expect `results/127-0-0-1-*.html` to open automatically in the default browser.
 
-## Local web UI
-```bash
-pip install --no-deps .[dev]
-python web_ui.py
-```
-Navigate to <http://127.0.0.1:5000/>, choose a localhost/RFC1918 target, and watch the job complete.
-Reports are written to the shared `results/` directory.
+2. **Web UI walk-through**
+   ```bash
+   python web_ui.py
+   ```
+   - Browse to http://127.0.0.1:5000/
+   - Submit target `127.0.0.1` and ports `3000`.
+   - Wait for completion and open the HTML link provided.
 
-## Docker Compose demo
-```bash
-make demo       # launches Juice Shop + optional runner (HTML output in ./results)
-make demo-ui    # launches Juice Shop + local-only ReconScript UI on 127.0.0.1:5000
-```
-Both targets bind only to loopback interfaces. Results from container runs appear under `./results/`.
+3. **Docker Compose pairing with Juice Shop**
+   ```bash
+   docker-compose up
+   ```
+   - Juice Shop available on http://127.0.0.1:3000/
+   - ReconScript UI available on http://127.0.0.1:5000/
+   - Reports persist to `./results/` on the host.
+
+4. **Optional PDF verification**
+   ```bash
+   docker build --build-arg INCLUDE_PDF=true -t reconscript:pdf .
+   ```
+   - Run the image to confirm PDF generation succeeds when dependencies are bundled.
