@@ -53,15 +53,6 @@ def _non_negative_int(value: str) -> int:
     return result
 
 
-def _positive_int(value: str) -> int:
-    """Validate positive integer arguments."""
-
-    result = int(value)
-    if result <= 0:
-        raise argparse.ArgumentTypeError("Value must be greater than zero")
-    return result
-
-
 def build_parser() -> argparse.ArgumentParser:
     """Create a configured argument parser for the CLI."""
 
@@ -95,13 +86,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Write JSON output to the specified file path",
     )
     parser.add_argument(
-        "--timeout-socket",
+        "--socket-timeout",
         type=_positive_float,
         default=DEFAULT_SOCKET_TIMEOUT,
         help="TCP socket timeout in seconds",
     )
     parser.add_argument(
-        "--timeout-http",
+        "--http-timeout",
         type=_positive_float,
         default=DEFAULT_HTTP_TIMEOUT,
         help="HTTP(S) request timeout in seconds",
@@ -119,26 +110,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Backoff factor between HTTP retries",
     )
     parser.add_argument(
-        "--throttle-ms",
+        "--throttle",
         type=_non_negative_float,
-        default=250.0,
-        help="Delay in milliseconds between TCP port probes",
+        default=0.2,
+        help="Delay in seconds between TCP port probes",
     )
     parser.add_argument(
         "--enable-ipv6",
         action="store_true",
         help="Also resolve and scan IPv6 addresses for the target",
-    )
-    parser.add_argument(
-        "--max-ports",
-        type=_positive_int,
-        default=12,
-        help="Maximum number of TCP ports to probe in a single run",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Print the planned probes and exit without performing network access",
     )
     verbosity = parser.add_mutually_exclusive_group()
     verbosity.add_argument(
@@ -188,14 +168,12 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
             target=args.target,
             hostname=args.hostname,
             ports=args.ports,
-            socket_timeout=args.timeout_socket,
-            http_timeout=args.timeout_http,
+            socket_timeout=args.socket_timeout,
+            http_timeout=args.http_timeout,
             max_retries=args.max_retries,
             backoff=args.backoff,
-            throttle_ms=args.throttle_ms,
+            throttle=args.throttle,
             enable_ipv6=args.enable_ipv6,
-            max_ports=args.max_ports,
-            dry_run=args.dry_run,
             outfile=args.outfile,
         )
     except (ValueError, RuntimeError) as error:

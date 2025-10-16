@@ -15,11 +15,13 @@ import socket
 import ssl
 import time
 from dataclasses import dataclass
-from http.cookies import CookieError, SimpleCookie
+from http.cookies import SimpleCookie, CookieError
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 import requests
 from requests import Response
+from requests.adapters import HTTPAdapter
+from urllib3.util import Retry
 
 LOGGER = logging.getLogger(__name__)
 
@@ -38,21 +40,7 @@ DEFAULT_MAX_RETRIES: int = 2
 DEFAULT_BACKOFF: float = 0.5
 
 # User agent string highlights defensive purpose for transparency.
-USER_AGENT: str = "ReconScript/0.3 (authorized security review)"
-
-
-def _max_attempts(max_retries: int) -> int:
-    """Return the total number of attempts including the first try."""
-
-    return max(1, min(3, 1 + max_retries))
-
-
-def _backoff_delay(backoff: float, attempt: int) -> float:
-    """Calculate the exponential backoff delay for the next retry."""
-
-    if attempt <= 1 or backoff <= 0:
-        return 0.0
-    return backoff * (2 ** (attempt - 2))
+USER_AGENT: str = "ReconScript/0.2 (authorized security review)"
 
 
 @dataclass
@@ -111,12 +99,25 @@ def resolve_addresses(target: str, enable_ipv6: bool) -> List[Tuple[int, int, in
         raise RuntimeError(f"Unable to resolve target address: {error}") from error
 
 
-def create_http_session(timeout: float) -> requests.Session:
-    """Construct a ``requests`` session with consistent timeout handling."""
+def create_http_session(timeout: float, max_retries: int, backoff: float) -> requests.Session:
+    """Construct a ``requests`` session with retry handling."""
 
-    # Retrying is handled explicitly in the HTTP helper to keep policy visible.
+    # Retry policy avoids aggressive traffic while handling transient network errors.
+    retry_policy = Retry(
+        total=max_retries,
+        read=max_retries,
+        connect=max_retries,
+        backoff_factor=backoff,
+        status_forcelist=(408, 429, 500, 502, 503, 504),
+        allowed_methods=("GET", "HEAD"),
+        raise_on_status=False,
+    )
+
+    adapter = HTTPAdapter(max_retries=retry_policy)
     session = requests.Session()
     session.headers.update({"User-Agent": USER_AGENT})
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
 
     # Store timeout on the session for consistent caller behaviour.
     session.request = _timeout_wrapper(session.request, timeout)  # type: ignore[assignment]
@@ -142,8 +143,7 @@ def tcp_connect_scan(
     """Perform TCP connect scans against each requested port.
 
     The scan uses ``socket.create_connection`` with strict timeouts and
-    optional throttling (expressed in seconds) to remain polite within
-    authorised scopes.
+    optional throttling to remain polite within authorised scopes.
     """
 
     open_ports: List[int] = []
@@ -174,25 +174,9 @@ def tcp_connect_scan(
 def parse_cookie_flags(response: Response) -> Optional[Dict[str, bool]]:
     """Extract Secure/HttpOnly attributes from HTTP cookies."""
 
-    secure_flag = False
-    httponly_flag = False
-
-    # Leverage ``requests`` cookies first as they handle folding across headers.
-    cookie_jar = getattr(response, "cookies", None)
-    if cookie_jar is not None:
-        for cookie in cookie_jar:  # type: ignore[not-an-iterable]
-            secure_flag = secure_flag or getattr(cookie, "secure", False)
-            rest = getattr(cookie, "rest", {})
-            httponly_flag = httponly_flag or bool(
-                rest.get("HttpOnly") or rest.get("httponly")
-            )
-            has_nonstandard = getattr(cookie, "has_nonstandard_attr", None)
-            if callable(has_nonstandard):
-                httponly_flag = httponly_flag or bool(has_nonstandard("HttpOnly"))
-
     # Collect raw Set-Cookie header strings to retain attribute flags.
     header_values: List[str] = []
-    if hasattr(response, "raw") and hasattr(response.raw, "headers"):
+    if hasattr(response.raw, "headers"):
         raw_headers = response.raw.headers
         if hasattr(raw_headers, "getlist"):
             header_values.extend(raw_headers.getlist("Set-Cookie"))  # type: ignore[attr-defined]
@@ -202,11 +186,11 @@ def parse_cookie_flags(response: Response) -> Optional[Dict[str, bool]]:
         header = response.headers.get("Set-Cookie")
         if header:
             header_values.append(header)
-
-    observed_cookies = bool(header_values) or bool(cookie_jar and len(cookie_jar))
-    if not observed_cookies:
+    if not header_values:
         return None
 
+    secure_flag = False
+    httponly_flag = False
     for value in header_values:
         cookie = SimpleCookie()
         try:
@@ -218,13 +202,8 @@ def parse_cookie_flags(response: Response) -> Optional[Dict[str, bool]]:
             httponly_flag = httponly_flag or ("httponly" in lowered)
             continue
         for morsel in cookie.values():
-            # ``morsel['secure']`` and ``morsel['httponly']`` are empty strings when
-            # present, so check for non-None values rather than relying on truthiness.
-            secure_flag = secure_flag or morsel["secure"] is not None and morsel["secure"] != ""
-            httponly_flag = httponly_flag or (
-                morsel["httponly"] is not None and morsel["httponly"] != ""
-            )
-
+            secure_flag = secure_flag or bool(morsel["secure"])
+            httponly_flag = httponly_flag or bool(morsel["httponly"])
     return {"secure": secure_flag, "httponly": httponly_flag}
 
 
@@ -258,8 +237,6 @@ def probe_http_service(
     session: requests.Session,
     host_or_ip: str,
     port: int,
-    max_retries: int,
-    backoff: float,
 ) -> Dict[str, object]:
     """Request HTTP(S) metadata for the specified endpoint."""
 
@@ -270,34 +247,17 @@ def probe_http_service(
     else:
         url = f"{scheme}://{host_or_ip}:{port}"
 
-    attempts = _max_attempts(max_retries)
-    last_error: Optional[Exception] = None
-    response: Optional[Response] = None
-    for attempt in range(1, attempts + 1):
-        try:
-            response = session.get(url, allow_redirects=True)
-            break
-        except requests.exceptions.SSLError as error:
-            LOGGER.warning("TLS negotiation failed for %s:%s: %s", host_or_ip, port, error)
-            return {"error": f"TLS error: {error}"}
-        except requests.exceptions.Timeout as error:
-            last_error = error
-            LOGGER.warning("HTTP request to %s timed out (attempt %s/%s)", url, attempt, attempts)
-        except requests.exceptions.RequestException as error:
-            last_error = error
-            LOGGER.warning("HTTP request to %s failed (attempt %s/%s): %s", url, attempt, attempts, error)
-
-        if attempt == attempts:
-            if isinstance(last_error, requests.exceptions.Timeout):
-                return {"error": "request timed out"}
-            return {"error": str(last_error) if last_error else "request failed"}
-
-        delay = _backoff_delay(backoff, attempt + 1)
-        if delay:
-            time.sleep(delay)
-
-    if response is None:
-        return {"error": str(last_error) if last_error else "request failed"}
+    try:
+        response = session.get(url, allow_redirects=True)
+    except requests.exceptions.SSLError as error:
+        LOGGER.warning("TLS negotiation failed for %s:%s: %s", host_or_ip, port, error)
+        return {"error": f"TLS error: {error}"}
+    except requests.exceptions.Timeout:
+        LOGGER.warning("HTTP request to %s timed out", url)
+        return {"error": "request timed out"}
+    except requests.exceptions.RequestException as error:
+        LOGGER.warning("HTTP request to %s failed: %s", url, error)
+        return {"error": str(error)}
 
     result: Dict[str, object] = {
         "url": response.url,
@@ -307,7 +267,7 @@ def probe_http_service(
     }
 
     cookie_flags = parse_cookie_flags(response)
-    if cookie_flags is not None:
+    if cookie_flags:
         result["cookie_flags"] = cookie_flags
 
     result["security_headers_check"] = check_security_headers(result["server_headers"])
@@ -324,80 +284,39 @@ def fetch_tls_certificate(
     context.check_hostname = False
 
     addresses = resolve_addresses(config.target, config.enable_ipv6)
-    attempts = _max_attempts(config.max_retries)
-    for attempt in range(1, attempts + 1):
-        for family, _, _, _, sockaddr in addresses:
-            if family not in (socket.AF_INET, socket.AF_INET6):
-                continue
-            host = sockaddr[0]
-            try:
-                with socket.create_connection((host, port), timeout=config.socket_timeout) as sock:
-                    with context.wrap_socket(
-                        sock, server_hostname=config.hostname or config.target
-                    ) as wrapped:
-                        certificate = wrapped.getpeercert()
-                        if not certificate:
-                            continue
-                        return {
-                            "subject": dict(entry[0] for entry in certificate.get("subject", [])),
-                            "issuer": dict(entry[0] for entry in certificate.get("issuer", [])),
-                            "notBefore": certificate.get("notBefore"),
-                            "notAfter": certificate.get("notAfter"),
-                            "serialNumber": certificate.get("serialNumber"),
-                        }
-            except (ssl.SSLError, socket.timeout, ConnectionError, OSError) as error:
-                LOGGER.warning(
-                    "TLS retrieval failed on %s:%s (attempt %s/%s): %s",
-                    host,
-                    port,
-                    attempt,
-                    attempts,
-                    error,
-                )
-                continue
-        if attempt < attempts:
-            delay = _backoff_delay(config.backoff, attempt + 1)
-            if delay:
-                time.sleep(delay)
+    for family, _, _, _, sockaddr in addresses:
+        host = sockaddr[0]
+        try:
+            with socket.create_connection((host, port), timeout=config.socket_timeout) as sock:
+                with context.wrap_socket(sock, server_hostname=config.hostname or config.target) as wrapped:
+                    certificate = wrapped.getpeercert()
+                    if not certificate:
+                        continue
+                    return {
+                        "subject": dict(entry[0] for entry in certificate.get("subject", [])),
+                        "issuer": dict(entry[0] for entry in certificate.get("issuer", [])),
+                        "notBefore": certificate.get("notBefore"),
+                        "notAfter": certificate.get("notAfter"),
+                        "serialNumber": certificate.get("serialNumber"),
+                    }
+        except (ssl.SSLError, socket.timeout, ConnectionError, OSError) as error:
+            LOGGER.warning("TLS retrieval failed on %s:%s: %s", host, port, error)
+            continue
     return {"error": "unable to retrieve TLS certificate"}
 
 
-def fetch_robots(
-    session: requests.Session,
-    host_or_ip: str,
-    max_retries: int,
-    backoff: float,
-) -> Dict[str, object]:
+def fetch_robots(session: requests.Session, host_or_ip: str) -> Dict[str, object]:
     """Fetch robots.txt with preference for HTTPS."""
 
-    attempts = _max_attempts(max_retries)
     for scheme in ("https", "http"):
         url = f"{scheme}://{host_or_ip}/robots.txt"
-        last_error: Optional[Exception] = None
-        for attempt in range(1, attempts + 1):
-            try:
-                response = session.get(url, allow_redirects=True)
-            except requests.exceptions.RequestException as error:
-                last_error = error
-                LOGGER.debug(
-                    "Robots fetch failed for %s (attempt %s/%s): %s",
-                    url,
-                    attempt,
-                    attempts,
-                    error,
-                )
-            else:
-                if response.status_code == 200 and response.text.strip():
-                    return {"url": url, "body": response.text[:2000]}
-                if response.status_code == 404:
-                    break
-            if attempt == attempts:
-                break
-            delay = _backoff_delay(backoff, attempt + 1)
-            if delay:
-                time.sleep(delay)
-        if last_error:
-            LOGGER.debug("Robots retrieval ultimately failed for %s: %s", url, last_error)
+        try:
+            response = session.get(url, allow_redirects=True)
+        except requests.exceptions.RequestException as error:
+            LOGGER.debug("Robots fetch failed for %s: %s", url, error)
+            continue
+        if response.status_code == 200 and response.text.strip():
+            return {"url": url, "body": response.text[:2000]}
     return {"note": "robots.txt not present or inaccessible"}
 
 

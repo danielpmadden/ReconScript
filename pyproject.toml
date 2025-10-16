@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "reconscript"
-version = "0.3.0"
+version = "0.2.0"
 description = "Safe reconnaissance helper for authorized assessments only; use responsibly within agreed scope."
 readme = "README.md"
 requires-python = ">=3.9"

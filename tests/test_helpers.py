@@ -6,16 +6,9 @@ from typing import Dict
 
 import pytest
 from requests import Response
-from requests.cookies import RequestsCookieJar
 from requests.structures import CaseInsensitiveDict
 
-from reconscript.core import (
-    check_security_headers,
-    generate_findings,
-    parse_cookie_flags,
-    run_recon,
-)
-from reconscript.scanner import create_http_session, fetch_robots
+from reconscript.core import check_security_headers, generate_findings, parse_cookie_flags
 
 
 class _HeaderCollector:
@@ -35,10 +28,7 @@ class _RawResponse:
         self.headers = _HeaderCollector(header_map)
 
 
-def _build_response(
-    headers: Dict[str, str],
-    raw_headers: Dict[str, list[str]] | None = None,
-) -> Response:
+def _build_response(headers: Dict[str, str], raw_headers: Dict[str, list[str]] | None = None) -> Response:
     """Create a minimal ``Response`` object for testing."""
 
     response = Response()
@@ -90,51 +80,3 @@ def test_generate_findings_reports_issues():
 
     issues = {finding["issue"] for finding in findings}
     assert {"missing_security_headers", "session_cookie_flags", "server_error"} <= issues
-
-
-def test_parse_cookie_flags_uses_cookie_jar():
-    response = _build_response({})
-    jar = RequestsCookieJar()
-    jar.set("session", "value", secure=True, rest={"HttpOnly": True})
-    response.cookies = jar  # type: ignore[attr-defined]
-
-    result = parse_cookie_flags(response)
-
-    assert result == {"secure": True, "httponly": True}
-
-
-def test_run_recon_dry_run_skips_network(monkeypatch):
-    def _fail(*_args, **_kwargs):
-        raise AssertionError("network helper should not be invoked during dry-run")
-
-    monkeypatch.setattr("reconscript.core.tcp_connect_scan", _fail)
-    monkeypatch.setattr("reconscript.core.probe_http_service", _fail)
-    monkeypatch.setattr("reconscript.core.fetch_tls_certificate", _fail)
-    monkeypatch.setattr("reconscript.core.fetch_robots", _fail)
-
-    report = run_recon(
-        target="127.0.0.1",
-        hostname=None,
-        ports=[80, 443],
-        dry_run=True,
-    )
-
-    assert report["plan"]["tcp_ports_to_probe"] == [80, 443]
-    assert report["scan_config"]["dry_run"] is True
-
-
-def test_fetch_robots_prefers_https():
-    responses = pytest.importorskip("responses")
-    with responses.RequestsMock() as rs:
-        rs.add(
-            method=responses.GET,
-            url="https://example.com/robots.txt",
-            body="User-agent: *\nAllow: /",
-            status=200,
-        )
-
-        session = create_http_session(timeout=1)
-        result = fetch_robots(session, "example.com", max_retries=0, backoff=0.1)
-
-    assert result["url"].startswith("https://")
-    assert "User-agent" in result["body"]
