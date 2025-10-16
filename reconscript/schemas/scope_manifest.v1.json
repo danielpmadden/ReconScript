@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ReconScript Scope Manifest",
+  "type": "object",
+  "required": [
+    "owner_name",
+    "owner_email",
+    "target",
+    "allowed_ports",
+    "valid_from",
+    "valid_until",
+    "signature"
+  ],
+  "properties": {
+    "owner_name": {"type": "string"},
+    "owner_email": {"type": "string", "format": "email"},
+    "target": {"type": "string"},
+    "allowed_ports": {
+      "type": "array",
+      "items": {"type": "integer", "minimum": 1, "maximum": 65535},
+      "minItems": 1
+    },
+    "valid_from": {"type": "string", "format": "date-time"},
+    "valid_until": {"type": "string", "format": "date-time"},
+    "evidence_level": {
+      "type": "string",
+      "enum": ["low", "medium", "high"]
+    },
+    "signature": {"type": "string"}
+  }
+}

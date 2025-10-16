@@ -199,3 +199,63 @@ Continuous Integration is configured to lint, test, and validate builds automati
 ---
 
 ReconScript keeps reconnaissance ethical, auditable, and production-ready—empowering defenders with the context they need without crossing the line.
+
+---
+
+## Security controls & consent workflow
+
+ReconScript enforces scope validation and explicit consent:
+
+- Targets must be single IPv4/IPv6 addresses or hostnames. CIDR notation is rejected unless `ALLOW_CIDR=true` and the range collapses to a single host.
+- Non-local targets (`127.0.0.1`/`localhost`/`::1` excluded) require a signed manifest that includes `owner_name`, `owner_email`, `target`, permitted ports, validity window, and an ed25519 signature.
+- Evidence levels:
+  - `low` (default) – sanitized metadata only.
+  - `medium` – headers plus artefact placeholders.
+  - `high` – full request/response logs; only permitted with manifests explicitly authorising `"evidence_level": "high"`.
+- Reports include a SHA256 `report_hash`, optional signature, and are indexed in `results/index.json` for auditability.
+
+Generate a development manifest using:
+```bash
+python scripts/generate_scope_manifest.py \
+  --owner-name "Example Corp" \
+  --owner-email "security@example.com" \
+  --target 127.0.0.1 \
+  --ports 80 443 \
+  --output dev-manifest.json
+```
+
+## Environment quick reference
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `ENABLE_PUBLIC_UI` | `false` | Bind UI to `0.0.0.0` when `true` (requires `ENABLE_RBAC=true`). |
+| `ENABLE_RBAC` | `false` | Enable Flask-Login admin guard. |
+| `ADMIN_USER` / `ADMIN_PASSWORD` | `admin` / `changeme` | Development credentials (replace in production). |
+| `CONSENT_PUBLIC_KEY_PATH` | `keys/dev_ed25519.pub` | Consent signature verification key. |
+| `REPORT_SIGNING_KEY_PATH` | `keys/dev_ed25519.priv` | Private key used when `--sign-report` is supplied. |
+| `FLASK_SECRET_KEY_FILE` | `keys/dev_flask_secret.key` | Secret key for Flask sessions. |
+| `TOKEN_RATE` / `TOKEN_CAPACITY` | `5` / `10` | Token bucket rate limiting TCP probes. |
+| `HTTP_WORKERS` | `2` | Concurrent HTTP workers. |
+
+The `keys/` directory ships with **development-only** keys. Replace them before any production deployment.
+
+## Testing
+
+Run deterministic unit tests:
+```bash
+pytest -m "not integration"
+```
+
+Opt-in integration tests:
+```bash
+INTEGRATION=true INTEGRATION_SCANME=true pytest -m integration
+```
+
+## Running the CLI safely
+
+Example local scan with JSON output and signed report:
+```bash
+python -m reconscript --target 127.0.0.1 --format json --sign-report
+```
+
+Reports are stored under `results/<report_id>/` along with consent manifests and optional signatures.

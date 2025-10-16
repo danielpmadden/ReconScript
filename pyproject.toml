@@ -5,10 +5,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "reconscript"
-version = "0.5.0"
+version = "0.6.0"
 description = "Safe, read-only reconnaissance helper for authorized assessments only; use responsibly within agreed scope."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 license = { text = "MIT" }
 
 authors = [{ name = "Daniel Madden" }]
@@ -27,39 +27,22 @@ classifiers = [
 ]
 
 dependencies = [
-  "requests==2.31.0",
+  "Flask==3.0.3",
+  "Flask-Login==0.6.3",
+  "Jinja2==3.1.4",
+  "requests==2.32.3",
   "urllib3==2.2.3",
-  "jinja2==3.1.6",
-  "flask==2.3.3",
+  "python-dotenv==1.0.1",
   "rich==13.7.1",
-  "tabulate==0.9.0",
-  "colorama==0.4.6",
-  "weasyprint==66.0",
-  "fonttools==4.60.1",
-  "tinycss2==1.2.1",
-  "cssselect2==0.8.0",
-  "pyphen==0.17.2",
-  "pydyf==0.11.0",
-  "markupsafe==3.0.3",
-  "itsdangerous==2.1.2",
-  "werkzeug==3.0.3",
+  "PyNaCl==1.5.0",
 ]
 
 [project.optional-dependencies]
-pdf = [
-  "weasyprint==66.0"
-]
 dev = [
-  "pytest>=7.4,<8",
-  "responses>=0.25,<0.26",
-  "flake8>=6.1,<7",
-  "bandit>=1.7,<2",
-  "build",
-  "twine"
-]
-docs = [
-  "mkdocs>=1.5,<2",
-  "mkdocs-material>=9,<10"
+  "black==24.4.2",
+  "ruff==0.5.4",
+  "pip-audit==2.7.3",
+  "pytest==8.2.2"
 ]
 
 [project.urls]
@@ -73,10 +56,14 @@ reconscript = "reconscript.cli:main"
 
 [tool.setuptools]
 packages = ["reconscript"]
+include-package-data = true
 
 [tool.setuptools.package-data]
-reconscript = ["templates/*.html", "static/*"]
+reconscript = ["templates/*.html", "templates/*.j2", "static/*", "static/js/*.js"]
 
 [tool.pytest.ini_options]
 addopts = "-ra"
 testpaths = ["tests"]
+markers = [
+  "integration: opt-in network integration tests"
+]

@@ -1,0 +1,26 @@
+# ReconScript Report for {{ data.target }}
+
+* **Target:** {{ data.target }}
+* **Hostname:** {{ data.hostname or 'N/A' }}
+* **Evidence level:** {{ data.evidence_level }}
+* **Report hash:** {{ data.report_hash }}
+{% if data.consent_signed_by %}* **Consent signer:** {{ data.consent_signed_by }}
+{% endif %}* **Started:** {{ data.started_at }}
+* **Completed:** {{ data.completed_at }}
+
+## Open Ports
+{% if data.open_ports %}
+{% for port in data.open_ports %}- {{ port }}
+{% endfor %}
+{% else %}- No open ports detected.
+{% endif %}
+
+## Findings
+```
+{{ data.findings | tojson(indent=2) }}
+```
+
+## HTTP Checks
+```
+{{ data.http_checks | tojson(indent=2) }}
+```
