@@ -1,7 +1,7 @@
 {
   "target": "127.0.0.1",
   "hostname": "localhost",
-  "tool_version": "0.3.0",
+  "version": "0.4.0",
   "generated": "2024-05-15T12:00:00Z",
   "summary": "Hypothetical OWASP Juice Shop assessment",
   "findings": [

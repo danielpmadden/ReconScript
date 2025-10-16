@@ -5,6 +5,8 @@
 ############################################################
 FROM python:3.11-slim AS builder
 
+ARG INCLUDE_PDF=true
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
@@ -13,10 +15,23 @@ WORKDIR /app
 # Install build prerequisites only for this stage.
 RUN apt-get update \
     && apt-get install --no-install-recommends -y build-essential \
+    && if [ "$INCLUDE_PDF" = "true" ]; then \
+        apt-get install --no-install-recommends -y \
+            libcairo2 \
+            libffi-dev \
+            libgdk-pixbuf-2.0-0 \
+            libpango-1.0-0 \
+            libpangocairo-1.0-0 \
+            libjpeg62-turbo \
+            libxml2 \
+            libxslt1.1 \
+            fonts-liberation \
+            shared-mime-info; \
+      fi \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy project files required for installation and testing.
-COPY pyproject.toml README.md ./
+COPY pyproject.toml README.md CHANGELOG.md HELP.md ./
 COPY reconscript ./reconscript
 COPY recon_script.py ./
 COPY examples ./examples
@@ -37,11 +52,13 @@ RUN pip wheel --no-deps --wheel-dir /wheels .
 ##############################################
 FROM python:3.11-slim AS runtime
 
+ARG INCLUDE_PDF=true
+
 LABEL maintainer="Safe Recon Team <security@example.com>" \
       org.opencontainers.image.title="ReconScript" \
       org.opencontainers.image.description="Read-only reconnaissance helper with dry-run, throttling, and safety controls." \
       org.opencontainers.image.licenses="MIT" \
-      org.opencontainers.image.version="0.3.0"
+      org.opencontainers.image.version="0.4.0"
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -53,7 +70,22 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Set application directory before switching to non-root user.
 WORKDIR /app
 
-# Install only runtime dependencies from the pre-built wheel set.
+# Install runtime dependencies and optional PDF libraries.
+RUN apt-get update \
+    && if [ "$INCLUDE_PDF" = "true" ]; then \
+        apt-get install --no-install-recommends -y \
+            libcairo2 \
+            libgdk-pixbuf-2.0-0 \
+            libpango-1.0-0 \
+            libpangocairo-1.0-0 \
+            libjpeg62-turbo \
+            libxml2 \
+            libxslt1.1 \
+            fonts-liberation \
+            shared-mime-info; \
+      fi \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=builder /wheels /wheels
 RUN pip install --no-cache-dir /wheels/* \
     && rm -rf /wheels
@@ -64,6 +96,7 @@ USER appuser
 
 # Copy documentation/examples that may help operators inside the container.
 COPY --chown=appuser:appuser examples ./examples
+COPY --chown=appuser:appuser HELP.md ./HELP.md
 
 ENTRYPOINT ["python", "-m", "reconscript"]
 CMD ["--help"]
