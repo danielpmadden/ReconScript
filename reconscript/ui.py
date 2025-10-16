@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import sys
 import threading
 import uuid
 import webbrowser
@@ -41,6 +43,24 @@ STATIC_FOLDER = PACKAGE_ROOT / "static"
 DEFAULT_PORTS_DISPLAY = "80,443,8080,8443,8000,3000"
 
 
+def _in_docker() -> bool:
+    if Path("/.dockerenv").exists():
+        return True
+    if os.environ.get("RUNNING_IN_DOCKER") == "1":
+        return True
+    if os.environ.get("WSL_INTEROP"):
+        return True
+    if Path("/var/run/docker.sock").exists():
+        return True
+    try:
+        cgroup = Path("/proc/self/cgroup")
+        if cgroup.exists() and "docker" in cgroup.read_text():
+            return True
+    except OSError:
+        pass
+    return False
+
+
 @dataclass
 class JobState:
     """Track the lifecycle of a browser-triggered scan."""
@@ -76,7 +96,12 @@ def create_app() -> Flask:
         template_folder=str(TEMPLATE_FOLDER),
         static_folder=str(STATIC_FOLDER),
     )
-    app.config.update(TEMPLATES_AUTO_RELOAD=True)
+    app.config.update(
+        TEMPLATES_AUTO_RELOAD=True,
+        SERVER_NAME=os.environ.get("SERVER_NAME", "127.0.0.1:5000"),
+        APPLICATION_ROOT="/",
+        PREFERRED_URL_SCHEME="http",
+    )
 
     changelog_summary = _read_changelog_summary()
     changelog_path = PACKAGE_ROOT.parent / "CHANGELOG.md"
@@ -85,6 +110,8 @@ def create_app() -> Flask:
     def _inject_globals() -> Dict[str, object]:
         return {
             "version": __version__,
+            "python_version": sys.version.split()[0],
+            "environment": "Docker" if _in_docker() else "Local",
             "changelog_summary": changelog_summary,
             "changelog_filename": changelog_path.name if changelog_path.exists() else None,
         }
@@ -273,7 +300,7 @@ def create_app() -> Flask:
     def serve_report(filename: str):
         return send_from_directory(results_dir, filename, as_attachment=False)
 
-    @app.get("/healthz")
+    @app.get("/health")
     def healthcheck() -> Response:
         return jsonify({"status": "ok", "jobs": len(jobs)})
 

@@ -1,23 +1,11 @@
-version: "3.9"
+version: "3.8"
 
 services:
-  juice-shop:
-    image: bkimminich/juice-shop
-    restart: unless-stopped
+  reconscript:
+    build: .
     ports:
-      - "127.0.0.1:3000:3000"
-
-  recon-ui:
-    build:
-      context: .
-      args:
-        INCLUDE_PDF: ${INCLUDE_PDF-false}
-    command: ["python", "web_ui.py"]
-    environment:
-      - PYTHONUNBUFFERED=1
-    depends_on:
-      - juice-shop
+      - "5000:5000"
     volumes:
       - ./results:/app/results
-    ports:
-      - "127.0.0.1:5000:5000"
+    environment:
+      - SERVER_NAME=127.0.0.1:5000
