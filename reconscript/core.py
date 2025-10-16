@@ -3,102 +3,135 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
-from datetime import datetime
-from typing import Callable, Dict, Optional
+from datetime import datetime, timezone
+from typing import Iterable, Optional, Sequence
 
 from . import __version__
+from .consent import ConsentManifest
 from .report import embed_runtime_metadata
+from .scope import ScopeValidation, ScopeError, ensure_within_allowlist, validate_target
 from .scanner import (
-    DEFAULT_HTTP_TIMEOUT,
-    DEFAULT_MAX_RETRIES,
-    DEFAULT_SOCKET_TIMEOUT,
-    DEFAULT_BACKOFF,
-    HTTP_PORTS,
+    DEFAULT_PORTS,
+    REDACTION_KEYS,
+    TOKEN_CAPACITY,
+    TOKEN_RATE,
     ScanConfig,
     check_security_headers,
-    create_http_session,
     fetch_robots,
     fetch_tls_certificate,
     generate_findings,
-    normalize_target,
-    parse_cookie_flags,
-    probe_http_service,
+    http_probe_services,
     serialize_results,
     tcp_connect_scan,
     validate_port_list,
 )
+from .scanner.throttle import TokenBucket
 
 LOGGER = logging.getLogger(__name__)
 REPORT_LOGGER = logging.getLogger("reconscript.report")
 
+EVIDENCE_LEVELS = {"low", "medium", "high"}
 
-ProgressCallback = Callable[[str, float], None]
+class ReconError(RuntimeError):
+    """Raised when a scan cannot proceed."""
 
 
-def _notify(callback: Optional[ProgressCallback], message: str, progress: float) -> None:
-    """Invoke ``callback`` with normalized progress if provided."""
+def _determine_redactions(extra: Optional[Iterable[str]]) -> set[str]:
+    redactions = set(REDACTION_KEYS)
+    for item in extra or []:
+        redactions.add(str(item).lower())
+    return redactions
 
-    if callback is None:
-        return
-    bounded = max(0.0, min(1.0, progress))
-    callback(message, bounded)
+
+def _validate_consent(
+    *,
+    manifest: ConsentManifest | None,
+    target: ScopeValidation,
+    requested_ports: Sequence[int],
+    evidence_level: str,
+) -> ConsentManifest | None:
+    if target.is_local:
+        return manifest
+    if manifest is None:
+        raise ReconError("Consent manifest is required for non-local targets.")
+    if manifest.target not in {target.target, target.resolved_ip or ""}:
+        raise ReconError("Consent manifest target does not match the requested target.")
+    if evidence_level == "high" and manifest.evidence_level != "high":
+        raise ReconError("High evidence level requires a manifest authorising high evidence collection.")
+    if any(port not in manifest.allowed_ports for port in requested_ports):
+        raise ReconError("Requested ports exceed the approved scope in the consent manifest.")
+    return manifest
+
+
+def _hostname_for_requests(scope: ScopeValidation, override: Optional[str]) -> str:
+    if override:
+        return override
+    if scope.kind == "hostname":
+        return scope.target
+    return scope.resolved_ip or scope.target
 
 
 def run_recon(
+    *,
     target: str,
-    hostname: Optional[str],
-    ports,
-    socket_timeout: float = DEFAULT_SOCKET_TIMEOUT,
-    http_timeout: float = DEFAULT_HTTP_TIMEOUT,
-    max_retries: int = DEFAULT_MAX_RETRIES,
-    backoff: float = DEFAULT_BACKOFF,
-    throttle: float = 0.0,
+    hostname: Optional[str] = None,
+    ports: Optional[Sequence[int]] = None,
+    expected_ip: Optional[str] = None,
     enable_ipv6: bool = False,
     dry_run: bool = False,
-    progress_callback: Optional[ProgressCallback] = None,
-) -> Dict[str, object]:
-    """Execute the ReconScript workflow and optionally persist the report."""
+    evidence_level: str = "low",
+    consent_manifest: ConsentManifest | None = None,
+    extra_redactions: Optional[Iterable[str]] = None,
+    progress_callback: Optional[callable] = None,
+) -> dict[str, object]:
+    """Execute the ReconScript workflow with safety controls."""
 
-    # Validate that the operator supplied an explicit in-scope IP address.
-    normalized_target = normalize_target(target)
-    # Normalise and deduplicate the requested ports for predictable scanning.
-    validated_ports = validate_port_list(ports)
+    evidence_level = evidence_level.lower()
+    if evidence_level not in EVIDENCE_LEVELS:
+        raise ReconError(f"Evidence level must be one of {sorted(EVIDENCE_LEVELS)}")
 
-    _notify(progress_callback, "Preparing scan configuration…", 0.05)
+    try:
+        scope = validate_target(target, expected_ip=expected_ip)
+        ensure_within_allowlist(scope)
+    except ScopeError as exc:
+        raise ReconError(str(exc)) from exc
 
-    config = ScanConfig(
-        target=normalized_target,
-        hostname=hostname,
-        ports=validated_ports,
-        socket_timeout=socket_timeout,
-        http_timeout=http_timeout,
-        max_retries=max_retries,
-        backoff=backoff,
-        throttle=throttle,
-        enable_ipv6=enable_ipv6,
+    candidates = list(ports) if ports else list(DEFAULT_PORTS)
+    port_list = validate_port_list(candidates)
+
+    manifest = _validate_consent(
+        manifest=consent_manifest,
+        target=scope,
+        requested_ports=port_list,
+        evidence_level=evidence_level,
     )
 
-    started_at = datetime.utcnow()
+    redactions = _determine_redactions(extra_redactions)
+    bucket = TokenBucket(rate=TOKEN_RATE, capacity=TOKEN_CAPACITY)
 
-    report: Dict[str, object] = {
-        "target": normalized_target,
+    started_at = datetime.now(timezone.utc)
+    report: dict[str, object] = {
+        "target": scope.target,
         "hostname": hostname,
-        "ports": list(validated_ports),
+        "ports": list(port_list),
         "version": __version__,
+        "evidence_level": evidence_level,
     }
+    if manifest:
+        report["consent_signed_by"] = manifest.signer_display
 
     embed_runtime_metadata(report, started_at)
 
     if dry_run:
-        LOGGER.info("Dry-run enabled; skipping network activity")
-        _notify(progress_callback, "Dry-run enabled; skipping network activity.", 1.0)
+        LOGGER.info("Dry-run requested; network operations skipped.")
         report.update(
             {
                 "open_ports": [],
                 "http_checks": {},
                 "tls_cert": None,
-                "robots": {"note": "dry-run: network operations skipped"},
+                "robots": {"note": "dry-run"},
                 "findings": [],
             }
         )
@@ -106,57 +139,62 @@ def run_recon(
         REPORT_LOGGER.info(serialize_results(report))
         return report
 
+    config = ScanConfig(
+        target=scope.resolved_ip or scope.target,
+        hostname=hostname,
+        ports=port_list,
+        enable_ipv6=enable_ipv6,
+        evidence_level=evidence_level,
+        redaction_keys=redactions,
+    )
+
+    http_host = _hostname_for_requests(scope, hostname)
+
     started_clock = time.perf_counter()
-    session = None
-    try:
-        # Reuse a single HTTP session to amortise connection setup and share retries.
-        session = create_http_session(
-            timeout=http_timeout, max_retries=max_retries, backoff=backoff
-        )
 
-        LOGGER.info("Starting TCP connect scan of %s on %s", normalized_target, list(validated_ports))
-        _notify(progress_callback, "Starting TCP connect scan…", 0.2)
-        open_ports = tcp_connect_scan(config, validated_ports, throttle)
-        report["open_ports"] = open_ports
+    if progress_callback:
+        progress_callback("Starting TCP connect scan", 0.1)
+    open_ports = tcp_connect_scan(config, bucket)
+    report["open_ports"] = open_ports
 
-        http_results: Dict[int, Dict[str, object]] = {}
-        if open_ports:
-            LOGGER.info("Evaluating HTTP services on detected ports")
-            _notify(progress_callback, "Evaluating HTTP services…", 0.4)
-        for port in open_ports:
-            if port in HTTP_PORTS:
-                LOGGER.debug("Fetching HTTP metadata from port %s", port)
-                http_results[port] = probe_http_service(session, hostname or normalized_target, port)
-        report["http_checks"] = http_results
+    http_results: dict[int, dict[str, object]] = {}
+    if open_ports:
+        if progress_callback:
+            progress_callback("Collecting HTTP metadata", 0.4)
+        http_results = http_probe_services(config, http_host, open_ports)
+    report["http_checks"] = http_results
 
-        if any(port in (443, 8443) for port in open_ports):
-            tls_port = 443 if 443 in open_ports else 8443
-            LOGGER.info("Gathering TLS certificate details from port %s", tls_port)
-            _notify(progress_callback, "Gathering TLS certificate details…", 0.6)
-            report["tls_cert"] = fetch_tls_certificate(config, tls_port)
+    tls_details = None
+    if any(port in (443, 8443) for port in open_ports):
+        if progress_callback:
+            progress_callback("Retrieving TLS certificates", 0.6)
+        tls_port = 443 if 443 in open_ports else 8443
+        tls_details = fetch_tls_certificate(config, tls_port)
+    report["tls_cert"] = tls_details
 
-        LOGGER.info("Requesting robots.txt for situational awareness")
-        _notify(progress_callback, "Requesting robots.txt…", 0.75)
-        report["robots"] = fetch_robots(session, hostname or normalized_target)
+    if progress_callback:
+        progress_callback("Fetching robots.txt", 0.75)
+    report["robots"] = fetch_robots(config, http_host)
 
-        report["findings"] = generate_findings(http_results)
-        _notify(progress_callback, "Generating findings…", 0.9)
+    if progress_callback:
+        progress_callback("Generating findings", 0.9)
+    report["findings"] = generate_findings(http_results)
 
-        completed_at = datetime.utcnow()
-        duration = time.perf_counter() - started_clock
-        embed_runtime_metadata(report, started_at, completed_at=completed_at, duration=duration)
-        REPORT_LOGGER.info(serialize_results(report))
+    completed_at = datetime.now(timezone.utc)
+    duration = time.perf_counter() - started_clock
+    embed_runtime_metadata(report, started_at, completed_at=completed_at, duration=duration)
+    REPORT_LOGGER.info(serialize_results(report))
 
-        _notify(progress_callback, "Reconnaissance complete.", 1.0)
+    if progress_callback:
+        progress_callback("Reconnaissance complete", 1.0)
 
-        return report
-    finally:
-        if session is not None:
-            session.close()
+    return report
+
 
 __all__ = [
     "run_recon",
+    "ReconError",
     "check_security_headers",
-    "generate_findings",
-    "parse_cookie_flags",
 ]
+
+

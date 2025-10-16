@@ -46,61 +46,23 @@ def render_json(data: Dict[str, object]) -> str:
 def render_markdown(data: Dict[str, object]) -> str:
     """Render the report data in Markdown format."""
 
-    target = data.get("target", "unknown")
-    timestamp = data.get("timestamp", datetime.utcnow().isoformat() + "Z")
-    hostname = data.get("hostname") or "N/A"
-    ports = _format_list(data.get("ports", []))
-    open_ports = _format_list(data.get("open_ports", []))
-    findings = data.get("findings", [])
+    if _JINJA_ENV is not None and _JINJA_ENV.loader is not None:
+        try:
+            template = _JINJA_ENV.get_template('report.md.j2')
+            return template.render(data=data)
+        except Exception:
+            pass
+
+    target = data.get('target', 'unknown')
+    timestamp = data.get('timestamp', datetime.utcnow().isoformat() + 'Z')
+    hostname = data.get('hostname') or 'N/A'
+    ports = _format_list(data.get('ports', []))
+    open_ports = _format_list(data.get('open_ports', []))
+    findings = data.get('findings', [])
     recommendations = _build_recommendations(findings)
 
     lines: List[str] = [
-        f"# ReconScript Report for {target}",
-        "",
-        "## Summary",
-        f"- **Target:** {target}",
-        f"- **Hostname:** {hostname}",
-        f"- **Ports Scanned:** {ports or 'None'}",
-        f"- **Open Ports:** {open_ports or 'None detected'}",
-        f"- **Findings:** {len(findings)}",
-        f"- **Generated:** {timestamp}",
-        "",
-        "## Findings",
-    ]
-
-    if findings:
-        for item in findings:
-            issue = item.get("issue", "observation")
-            port = item.get("port", "n/a")
-            details = item.get("details")
-            formatted_details = json.dumps(details, indent=2, sort_keys=True) if details else "n/a"
-            lines.extend(
-                [
-                    f"- **Port {port}** — `{issue}`",
-                    "",
-                    f"  ```json\n{formatted_details}\n  ```",
-                ]
-            )
-    else:
-        lines.append("- No issues detected during the assessment.")
-
-    lines.extend(["", "## Recommendations"])
-    if recommendations:
-        lines.extend([f"- {text}" for text in recommendations])
-    else:
-        lines.append("- Continue monitoring and maintain existing controls.")
-
-    lines.extend(
-        [
-            "",
-            "## Metadata",
-            f"- **Tool Version:** {data.get('version', __version__)}",
-            f"- **Report Generated:** {timestamp}",
-        ]
-    )
-
-    return "\n".join(lines)
-
+        f
 
 def render_html(data: Dict[str, object], out_path: Path) -> Path:
     """Render the report data as HTML and persist it to ``out_path``."""

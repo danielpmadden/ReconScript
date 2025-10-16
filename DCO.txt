@@ -1,0 +1,9 @@
+Developer Certificate of Origin
+
+By contributing to ReconScript you certify that:
+
+1. The contribution is your original work, or you have the right to submit it under the project's license.
+2. You understand and agree that the contribution and all associated intellectual property becomes part of the project under the MIT License.
+3. You have the authority to submit the contribution on behalf of yourself and your employer (if applicable).
+
+Include `Signed-off-by: Your Name <email>` in each commit message to acknowledge this DCO.
