@@ -9,7 +9,13 @@ import sys
 import pytest
 
 from reconscript import __version__
-from reconscript.reporters import render_html, render_markdown, write_report
+from reconscript.reporters import (
+    PDF_FALLBACK_MESSAGE,
+    generate_pdf,
+    render_html,
+    render_markdown,
+    write_report,
+)
 
 
 @pytest.fixture()
@@ -21,6 +27,9 @@ def sample_report() -> dict[str, object]:
         "open_ports": [80],
         "version": __version__,
         "timestamp": "2024-04-30T12:00:00Z",
+        "started_at": "2024-04-30T12:00:00Z",
+        "completed_at": "2024-04-30T12:00:05Z",
+        "runtime": {"duration": 5.0},
         "http_checks": {},
         "robots": {"note": "sample data"},
         "findings": [
@@ -69,3 +78,27 @@ def test_pdf_renderer_produces_file(sample_report, tmp_path):
         pytest.skip(f"PDF fallback triggered: {written_path}")
     assert written_path.exists()
     assert written_path.stat().st_size > 0
+
+
+def test_generate_pdf_fallback_message(monkeypatch, tmp_path, caplog):
+    html_path = tmp_path / "report.html"
+    html_path.write_text("<html></html>", encoding="utf-8")
+    pdf_path = tmp_path / "report.pdf"
+
+    import builtins
+
+    original_import = builtins.__import__
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "weasyprint":
+            raise ImportError("missing dependency")
+        return original_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr("builtins.__import__", fake_import)
+
+    with caplog.at_level("WARNING"):
+        written, success = generate_pdf(html_path, pdf_path)
+
+    assert written == html_path.resolve()
+    assert success is False
+    assert PDF_FALLBACK_MESSAGE in caplog.text

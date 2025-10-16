@@ -1,4 +1,3 @@
-# Modified by codex: 2024-05-08
 version: "3.9"
 
 services:
@@ -6,42 +5,19 @@ services:
     image: bkimminich/juice-shop
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
 
   recon-ui:
     build:
       context: .
-    image: reconscript:latest
+      args:
+        INCLUDE_PDF: ${INCLUDE_PDF-false}
     command: ["python", "web_ui.py"]
     environment:
       - PYTHONUNBUFFERED=1
-      - RECON_UI=true
+    depends_on:
+      - juice-shop
     volumes:
       - ./results:/app/results
     ports:
       - "127.0.0.1:5000:5000"
-    profiles: ["ui"]
-
-  recon-runner:
-    build:
-      context: .
-    image: reconscript:latest
-    command:
-      [
-        "--target",
-        "127.0.0.1",
-        "--ports",
-        "3000",
-        "--format",
-        "html",
-        "--outfile",
-        "results/juice-compose.html"
-      ]
-    environment:
-      - PYTHONUNBUFFERED=1
-    network_mode: host
-    volumes:
-      - ./results:/app/results
-    depends_on:
-      - juice-shop
-    profiles: ["runner"]

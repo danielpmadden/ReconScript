@@ -57,6 +57,7 @@ except ImportError:  # pragma: no cover - fallback when Rich is unavailable
 
 from . import __version__
 from .core import run_recon
+from .report import default_output_path, ensure_results_dir
 from .reporters import render_json, write_report
 from .scanner import (
     DEFAULT_BACKOFF,
@@ -292,6 +293,9 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
             assert target_path is not None
             written_path, actual_format = write_report(report, target_path, format_name)
             if format_name == "pdf" and actual_format != "pdf":
+                console.print(
+                    "PDF dependencies not found — served HTML version instead.",
+                )
                 report_paths["pdf"] = f"fallback to HTML: {written_path.resolve()}"
                 report_paths["html"] = written_path
             else:
@@ -401,17 +405,17 @@ def _serializable_args(args: argparse.Namespace) -> dict[str, object]:
 
 
 def _derive_default_outfile(report: dict[str, object], target: str, format_name: str) -> Path:
-    timestamp = str(report.get("timestamp", ""))
+    ensure_results_dir()
+    started_raw = str(
+        report.get("started_at")
+        or report.get("timestamp")
+        or datetime.utcnow().isoformat() + "Z"
+    )
     try:
-        parsed = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(started_raw.replace("Z", "+00:00"))
     except ValueError:
         parsed = datetime.utcnow()
-    stamp = parsed.strftime("%Y%m%d-%H%M%S")
-    slug = re.sub(r"[^A-Za-z0-9]+", "-", target).strip("-") or "report"
-    filename = f"{slug}-{stamp}.{_extension_for(format_name)}"
-    path = Path("results") / filename
-    path.parent.mkdir(parents=True, exist_ok=True)
-    return path
+    return default_output_path(target, parsed, _extension_for(format_name))
 
 
 def _extension_for(format_name: str) -> str:
@@ -430,8 +434,15 @@ def _build_completion_summary(
     findings = report.get("findings") or []
     findings_count = len(findings) if isinstance(findings, Sequence) else 0
     plural = "s" if findings_count != 1 else ""
-    header = f"✔ Scan complete — {findings_count} finding{plural} — Reports:"
-    lines = [header]
+    runtime = report.get("runtime") or {}
+    duration = runtime.get("duration") if isinstance(runtime, dict) else None
+    if isinstance(duration, (int, float)):
+        duration_display = f"{duration:.2f}"
+    else:
+        duration_display = None
+    duration_note = f" in {duration_display} seconds" if duration_display else ""
+    header = f"✔ Scan complete — {findings_count} finding{plural}{duration_note}"
+    lines = [header, "Reports:"]
     for key in sorted(report_paths):
         value = report_paths[key]
         if isinstance(value, Path):

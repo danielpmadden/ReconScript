@@ -1,17 +1,18 @@
-# Modified by codex: 2024-05-08
-
-.PHONY: demo demo-ui clean-results
+.PHONY: demo ui clean-results results test
 
 results := results
 
-$(results):
-	mkdir -p $(results)
+results:
+	mkdir -p $@
 
-demo: $(results)
-	docker compose --profile runner up --build
+demo: results
+	docker compose up --build
 
-demo-ui: $(results)
-	docker compose --profile ui up --build
+ui: results
+	python web_ui.py
+
+test:
+	pytest -q
 
 clean-results:
 	rm -rf $(results)/*

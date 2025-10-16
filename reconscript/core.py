@@ -4,12 +4,13 @@ from __future__ import annotations
 
 # Modified by codex: 2024-05-08
 
-import datetime as _dt
 import logging
 import time
+from datetime import datetime
 from typing import Dict, Optional
 
 from . import __version__
+from .report import embed_runtime_metadata
 from .scanner import (
     DEFAULT_HTTP_TIMEOUT,
     DEFAULT_MAX_RETRIES,
@@ -65,13 +66,16 @@ def run_recon(
         enable_ipv6=enable_ipv6,
     )
 
+    started_at = datetime.utcnow()
+
     report: Dict[str, object] = {
         "target": normalized_target,
         "hostname": hostname,
         "ports": list(validated_ports),
         "version": __version__,
-        "timestamp": _dt.datetime.utcnow().isoformat() + "Z",
     }
+
+    embed_runtime_metadata(report, started_at)
 
     if dry_run:
         LOGGER.info("Dry-run enabled; skipping network activity")
@@ -82,13 +86,13 @@ def run_recon(
                 "tls_cert": None,
                 "robots": {"note": "dry-run: network operations skipped"},
                 "findings": [],
-                "duration": 0.0,
             }
         )
+        embed_runtime_metadata(report, started_at, completed_at=started_at, duration=0.0)
         REPORT_LOGGER.info(serialize_results(report))
         return report
 
-    started = time.perf_counter()
+    started_clock = time.perf_counter()
     session = None
     try:
         # Reuse a single HTTP session to amortise connection setup and share retries.
@@ -119,7 +123,9 @@ def run_recon(
 
         report["findings"] = generate_findings(http_results)
 
-        report["duration"] = round(time.perf_counter() - started, 2)
+        completed_at = datetime.utcnow()
+        duration = time.perf_counter() - started_clock
+        embed_runtime_metadata(report, started_at, completed_at=completed_at, duration=duration)
         REPORT_LOGGER.info(serialize_results(report))
 
         return report

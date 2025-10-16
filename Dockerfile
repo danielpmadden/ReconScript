@@ -34,7 +34,9 @@ RUN apt-get update \
 # Copy project files required for installation and testing.
 COPY pyproject.toml README.md CHANGELOG.md HELP.md ./
 COPY reconscript ./reconscript
+COPY templates ./templates
 COPY recon_script.py ./
+COPY web_ui.py ./
 COPY examples ./examples
 COPY tests ./tests
 
@@ -105,6 +107,8 @@ USER appuser
 # Copy documentation/examples that may help operators inside the container.
 COPY --chown=appuser:appuser examples ./examples
 COPY --chown=appuser:appuser HELP.md ./HELP.md
+COPY --from=builder --chown=appuser:appuser /app/templates ./templates
+COPY --from=builder --chown=appuser:appuser /app/web_ui.py ./web_ui.py
 
 ENTRYPOINT ["python", "-m", "reconscript"]
 CMD ["--help"]
