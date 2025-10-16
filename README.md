@@ -48,10 +48,6 @@ Docker images honour the same `.env` settings. Reports appear under the mounted 
 - Live progress via Server-Sent Events and a Rich-styled console log.
 - Report library at `/results` serving HTML reports directly from the `results/` folder.
 
-Screenshot placeholders:
-- ![ReconScript dashboard placeholder](docs/screenshots/dashboard.png)
-- ![ReconScript report listing placeholder](docs/screenshots/results.png)
-
 ## CLI overview
 A concise flag summary lives in [HELP.md](HELP.md). Highlights:
 - `--target` (required): approved IPv4/IPv6 target.
@@ -75,7 +71,5 @@ Additional environment variables (for example `RUNNING_IN_DOCKER=1`) can help th
 - **PDF export fails in Docker:** ensure Cairo/Pango libraries are installed; the provided Dockerfile already includes them.
 - **Browser did not open:** when running in Docker the launcher prints the URL instead of auto-opening. In WSL, install `wslview` for seamless launching.
 
-## Changelog & help
-- See [CHANGELOG.md](CHANGELOG.md) for release notes.
+## Help
 - [HELP.md](HELP.md) contains detailed CLI usage examples.
-- Contributions welcome — open issues or PRs to share improvements.
