@@ -1,8 +1,6 @@
-"""High-level orchestration for ReconScript scans."""
+"""High-level orchestration for ReconScript scan execution."""
 
 from __future__ import annotations
-
-# Modified by codex: 2024-05-08
 
 import logging
 import time

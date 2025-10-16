@@ -3,8 +3,13 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-echo "🚀 Launching ReconScript..."
-mkdir -p results
+LOG_DIR="results"
+LOG_FILE="$LOG_DIR/latest.log"
+mkdir -p "$LOG_DIR"
 
-docker build -t reconscript .
-docker run --rm -p 5000:5000 -v "$(pwd)/results:/app/results" reconscript | tee results/latest.log
+echo "🚀 Launching ReconScript via start.py"
+echo "ℹ️  Live logs mirror to $LOG_FILE"
+
+PYTHON_BIN=${PYTHON:-python3}
+
+"$PYTHON_BIN" start.py "$@"

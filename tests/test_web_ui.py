@@ -6,44 +6,27 @@ import pytest
 
 pytest.importorskip("flask")
 
-import web_ui
+from reconscript import ui
 
 
-@pytest.fixture(autouse=True)
-def clean_jobs():
-    with web_ui._jobs_lock:
-        web_ui._jobs.clear()
-    yield
-    with web_ui._jobs_lock:
-        web_ui._jobs.clear()
+@pytest.fixture
+def configured_app(tmp_path, monkeypatch):
+    monkeypatch.setenv("RESULTS_DIR", str(tmp_path))
 
-
-def test_web_ui_start_job_creates_report(tmp_path, monkeypatch):
-    def fake_run_recon(**kwargs):
+    def fake_run_recon(target, hostname, ports, **_):
         return {
-            "target": kwargs["target"],
-            "ports": kwargs["ports"],
-            "open_ports": kwargs["ports"],
+            "target": target,
+            "hostname": hostname,
+            "ports": ports,
+            "open_ports": ports,
             "findings": [],
-            "started_at": "2024-05-01T12:00:00Z",
-            "runtime": {"duration": 1.0},
+            "runtime": {"duration": 1.2},
         }
-
-    def fake_default_output_path(target, started_at, extension):
-        return tmp_path / f"{target}.{extension}"
 
     def fake_write_report(report, outfile, fmt):
         path = Path(outfile)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("ok", encoding="utf-8")
-        return path, "html"
-
-    def fake_render_html(report, out_path):
-        Path(out_path).write_text("<html></html>", encoding="utf-8")
-        return Path(out_path)
-
-    def fake_render_json(report):
-        return "{}"
+        path.write_text("<html></html>", encoding="utf-8")
+        return path, fmt
 
     class ImmediateThread:
         def __init__(self, target, args=(), kwargs=None, daemon=None):
@@ -54,38 +37,50 @@ def test_web_ui_start_job_creates_report(tmp_path, monkeypatch):
         def start(self):
             self._target(*self._args, **self._kwargs)
 
-    monkeypatch.setattr(web_ui, "run_recon", fake_run_recon)
-    monkeypatch.setattr(web_ui, "default_output_path", fake_default_output_path)
-    monkeypatch.setattr(web_ui, "write_report", fake_write_report)
-    monkeypatch.setattr(web_ui, "render_html", fake_render_html)
-    monkeypatch.setattr(web_ui, "render_json", fake_render_json)
-    monkeypatch.setattr(web_ui.threading, "Thread", ImmediateThread)
+    monkeypatch.setattr(ui, "run_recon", fake_run_recon)
+    monkeypatch.setattr(ui, "write_report", fake_write_report)
+    monkeypatch.setattr(ui.threading, "Thread", ImmediateThread)
 
-    client = web_ui.app.test_client()
+    app = ui.create_app()
+    app.config.update(TESTING=True)
+    return app
+
+
+def test_scan_endpoint_requires_target(configured_app):
+    client = configured_app.test_client()
+    response = client.post("/api/scan", json={"ports": "80"})
+    assert response.status_code == 400
+    payload = response.get_json()
+    assert payload["status"] == "error"
+    assert "Target" in payload["message"]
+
+
+def test_scan_endpoint_generates_report_and_lists_results(configured_app, tmp_path):
+    client = configured_app.test_client()
     response = client.post(
-        "/start",
-        data={
-            "target": "127.0.0.1",
-            "ports": "8080",
-            "format": "html",
-            "socket_timeout": "1",
-            "http_timeout": "1",
-            "throttle": "0.1",
-        },
-        environ_base={"REMOTE_ADDR": "127.0.0.1"},
-        follow_redirects=False,
+        "/api/scan",
+        json={"target": "127.0.0.1", "ports": "8080", "format": "html"},
     )
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["status"] == "ok"
+    job_id = payload["job_id"]
 
-    assert response.status_code == 302
-    location = response.headers["Location"]
-    job_id = location.rsplit("/", 1)[-1]
+    # Consume the stream to ensure the background job completed.
+    stream_response = client.get(f"/stream/{job_id}")
+    stream_body = b"".join(stream_response.response)
+    assert b"complete" in stream_body
 
-    status_response = client.get(location, environ_base={"REMOTE_ADDR": "127.0.0.1"})
-    assert status_response.status_code == 200
-    assert "Reports" in status_response.get_data(as_text=True)
+    results_page = client.get("/results")
+    assert results_page.status_code == 200
+    assert "Saved Reports" in results_page.get_data(as_text=True)
 
-    with web_ui._jobs_lock:
-        job = web_ui._jobs[job_id]
-    assert job["status"] == "completed"
-    assert "html" in job["outputs"]
-    assert job["outputs"]["html"].endswith("127.0.0.1.html")
+    files = sorted(tmp_path.glob("*.html"))
+    assert files, "Expected report file to be written"
+
+
+def test_health_endpoint_ready(configured_app):
+    client = configured_app.test_client()
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.get_json() == {"status": "ok"}

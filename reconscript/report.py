@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional
+
+try:  # pragma: no cover - optional dependency fallback
+    from dotenv import load_dotenv
+except ModuleNotFoundError:  # pragma: no cover - minimal shim when python-dotenv missing
+    def load_dotenv() -> None:  # type: ignore[return-value]
+        return None
 
 __all__ = [
     "ReportPaths",
@@ -19,7 +26,9 @@ __all__ = [
 ]
 
 
-RESULTS_DIR = Path("results")
+load_dotenv()
+
+RESULTS_DIR = Path(os.environ.get("RESULTS_DIR", "results")).expanduser()
 
 
 @dataclass(frozen=True)

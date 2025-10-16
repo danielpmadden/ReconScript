@@ -152,7 +152,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const source = new EventSource(`/stream/${jobId}`);
 
     source.onmessage = (event) => {
-      const payload = JSON.parse(event.data);
+      let payload;
+      try {
+        payload = JSON.parse(event.data);
+      } catch (error) {
+        appendLog('❌ Invalid server response — check logs', 'error');
+        console.error('Unable to parse SSE payload', error, event.data);
+        source.close();
+        return;
+      }
       if (payload.type === 'status') {
         progressMessage.textContent = `${payload.icon} ${payload.message}`;
         progressBar.style.width = `${Math.round(payload.progress * 100)}%`;
@@ -222,15 +230,25 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       status.textContent = 'Starting scan…';
       // Post JSON payload so the Flask backend can start the scan asynchronously.
-      const response = await fetch('/scan', {
+      const response = await fetch('/api/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
 
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to start scan');
+      let data = null;
+      try {
+        data = await response.json();
+      } catch (error) {
+        appendLog('❌ Invalid server response — check logs', 'error');
+        console.error('Failed to parse scan API response', error);
+      }
+
+      if (!response.ok || !data || data.status !== 'ok') {
+        const message = data && (data.message || data.error)
+          ? data.message || data.error
+          : 'Failed to start scan';
+        throw new Error(message);
       }
       appendLog('Scan launched. Listening for updates…');
       startStream(data.job_id);

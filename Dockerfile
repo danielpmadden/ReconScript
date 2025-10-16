@@ -32,10 +32,15 @@ RUN apt-get update \
         libxslt1.1 \
         fonts-liberation \
         shared-mime-info \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && adduser --disabled-password --gecos "" reconscript
 
 COPY --from=builder /opt/venv /opt/venv
 COPY . .
+
+RUN chown -R reconscript:reconscript /app
+
+USER reconscript
 
 EXPOSE 5000
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Unified dependency bootstrapper for the ReconScript project."""
-
 from __future__ import annotations
+
+"""Helper script to ensure ReconScript runtime dependencies are installed."""
 
 import argparse
 import hashlib
@@ -34,6 +34,7 @@ REQUIREMENT_IMPORTS: Dict[str, str] = {
     "markupsafe": "markupsafe",
     "itsdangerous": "itsdangerous",
     "werkzeug": "werkzeug",
+    "python-dotenv": "dotenv",
 }
 
 
