@@ -5,26 +5,14 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "reconscript"
 version = "0.4.0"
-description = "Safe reconnaissance helper for authorized assessments only; use responsibly within agreed scope."
+description = "Safe, read-only reconnaissance helper for authorized assessments only; use responsibly within agreed scope."
 readme = "README.md"
 requires-python = ">=3.9"
-license = {text = "MIT"}
-authors = [
-  {name = "Safe Recon Team", email = "security@example.com"}
-]
-dependencies = [
-  "requests>=2.31,<2.32",
-  "rich>=13.7,<14",
-  "weasyprint>=61.2,<62",
-]
+license = { text = "MIT" }
 
-[project.optional-dependencies]
-dev = [
-  "pytest>=7.4,<8",
-  "responses>=0.25,<0.26",
-  "flake8>=6.1,<7"
-]
+authors = [{ name = "Daniel Madden" }]
 keywords = ["reconnaissance", "security", "safety"]
+
 classifiers = [
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.9",
@@ -37,9 +25,32 @@ classifiers = [
   "Development Status :: 4 - Beta"
 ]
 
+dependencies = [
+  "requests>=2.31,<2.32",
+  "rich>=13.7,<14",
+  "weasyprint>=61.2,<62",
+  "jinja2>=3.1,<4",
+  "tabulate>=0.9,<1"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.4,<8",
+  "responses>=0.25,<0.26",
+  "flake8>=6.1,<7",
+  "bandit>=1.7,<2",
+  "build",
+  "twine"
+]
+docs = [
+  "mkdocs>=1.5,<2",
+  "mkdocs-material>=9,<10"
+]
+
 [project.urls]
 Homepage = "https://example.com/reconscript"
 Repository = "https://example.com/reconscript/repo"
+Issues = "https://example.com/reconscript/issues"
 
 [project.scripts]
 safe-recon = "reconscript.cli:main"
@@ -49,7 +60,7 @@ reconscript = "reconscript.cli:main"
 packages = ["reconscript"]
 
 [tool.setuptools.package-data]
-"reconscript" = ["templates/*.html"]
+reconscript = ["templates/*.html"]
 
 [tool.pytest.ini_options]
 addopts = "-ra"
