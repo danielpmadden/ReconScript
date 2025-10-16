@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+# Modified by codex: 2024-05-08
+
 import datetime as _dt
 import logging
+import time
 from typing import Dict, Optional
 
 from . import __version__
@@ -79,11 +82,13 @@ def run_recon(
                 "tls_cert": None,
                 "robots": {"note": "dry-run: network operations skipped"},
                 "findings": [],
+                "duration": 0.0,
             }
         )
         REPORT_LOGGER.info(serialize_results(report))
         return report
 
+    started = time.perf_counter()
     session = None
     try:
         # Reuse a single HTTP session to amortise connection setup and share retries.
@@ -114,6 +119,7 @@ def run_recon(
 
         report["findings"] = generate_findings(http_results)
 
+        report["duration"] = round(time.perf_counter() - started, 2)
         REPORT_LOGGER.info(serialize_results(report))
 
         return report

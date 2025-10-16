@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+# Modified by codex: 2024-05-08
+# Modified by codex: 2024-05-08
+
 from pathlib import Path
+import sys
 
 import pytest
 
@@ -33,22 +37,35 @@ def test_markdown_renderer_includes_sections(sample_report):
 
 
 def test_html_renderer_uses_template(sample_report, tmp_path):
-    html_output = render_html(sample_report)
-    assert "<section id=\"summary\">" in html_output
     path = tmp_path / "report.html"
-    write_report(sample_report, path, "html")
-    assert path.exists()
-    assert path.stat().st_size > 0
+    written = render_html(sample_report, path)
+    assert written.exists()
+    assert written.read_text(encoding="utf-8").startswith("<!DOCTYPE html>")
+    assert "ReconScript" in written.read_text(encoding="utf-8")
 
 
+def test_write_report_generates_markdown(sample_report, tmp_path):
+    md_path = tmp_path / "report.md"
+    written_path, actual_format = write_report(sample_report, md_path, "markdown")
+    assert actual_format == "markdown"
+    assert written_path.exists()
+    assert "## Summary" in written_path.read_text(encoding="utf-8")
+
+
+def test_write_report_generates_json(sample_report, tmp_path):
+    json_path = tmp_path / "report.json"
+    written_path, actual_format = write_report(sample_report, json_path, "json")
+    assert actual_format == "json"
+    assert written_path.exists()
+    assert "target" in written_path.read_text(encoding="utf-8")
+
+
+@pytest.mark.skipif(sys.platform.startswith("win"), reason="GTK PDF backend unavailable on Windows CI")
 def test_pdf_renderer_produces_file(sample_report, tmp_path):
     pytest.importorskip("weasyprint")
     pdf_path = tmp_path / "report.pdf"
-    try:
-        write_report(sample_report, pdf_path, "pdf")
-    except RuntimeError as exc:  # pragma: no cover - environment limitation
-        pytest.skip(f"PDF generation unavailable: {exc}")
-    assert pdf_path.exists()
-    assert pdf_path.stat().st_size > 0
-    html_path = Path(str(pdf_path).replace(".pdf", ".html"))
-    assert html_path.exists()
+    written_path, actual_format = write_report(sample_report, pdf_path, "pdf")
+    if actual_format != "pdf":  # pragma: no cover - depends on system libraries
+        pytest.skip(f"PDF fallback triggered: {written_path}")
+    assert written_path.exists()
+    assert written_path.stat().st_size > 0

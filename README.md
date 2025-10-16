@@ -1,3 +1,5 @@
+<!-- # Modified by codex: 2024-05-08 -->
+
 # ReconScript
 
 ReconScript is a defensive reconnaissance assistant designed for authorised web
@@ -46,6 +48,16 @@ pip install -r requirements.lock
 pip install --no-deps .[dev]
 ```
 
+### Optional PDF support
+
+PDF export now ships as an optional extra so that the base installation remains
+lightweight. Install WeasyPrint and the required dependencies only when you need
+it:
+
+```bash
+pip install --no-deps .[pdf]
+```
+
 ### Verify Installation
 Confirm the package imports cleanly and the command is available:
 
@@ -72,21 +84,43 @@ reconscript --target 203.0.113.5 --hostname example.com --outfile recon.json
 The same invocation is available through `python -m reconscript`. Full guidance
 is available in [HELP.md](HELP.md).
 
-### Report Formats
+### Report Formats & default HTML output
 
-ReconScript can emit reports in multiple formats. Specify `--format` explicitly
-or rely on `--outfile` extensions:
+ReconScript now defaults to producing an HTML report when `--format` is not
+specified. The CLI writes results to the `results/` directory using a timestamped
+filename and automatically opens the HTML report in your default browser after a
+successful run. Disable the auto-open behaviour with `--no-browser`.
+
+Use the familiar flags to override the format or target a specific output file:
 
 ```bash
-reconscript --target example.com --format html --outfile results/report.html
-reconscript --target example.com --format markdown --outfile results/report.md
-reconscript --target example.com --format pdf --outfile results/report.pdf
+reconscript --target 203.0.113.5 --outfile results/scan.json --format json
+reconscript --target 203.0.113.5 --outfile results/scan.md --format markdown
+reconscript --target 203.0.113.5 --outfile results/scan.pdf --format pdf
 ```
 
-> **PDF prerequisites** – PDF rendering requires WeasyPrint and its system
-> libraries (installed automatically when building Docker with
-> `--build-arg INCLUDE_PDF=true`). When running locally ensure Cairo, Pango, and
-> fonts are available.
+> **PDF prerequisites** – Install the optional extras (`pip install .[pdf]`) or
+> build the Docker image with `--build-arg INCLUDE_PDF=true`. When the platform
+> lacks WeasyPrint/GTK libraries ReconScript automatically falls back to HTML and
+> prints a friendly warning.
+
+The CLI always stores a JSON copy of the results alongside other formats to make
+automation workflows simple.
+
+### Local Web UI
+
+A lightweight Flask interface is included for local demonstrations and quick
+scans:
+
+```bash
+pip install --no-deps .[dev]  # includes Flask
+python web_ui.py
+```
+
+Open <http://127.0.0.1:5000/> in your browser, enter a localhost or RFC1918
+target, and start the scan. The UI keeps jobs in-memory, streams status updates,
+and links to the generated HTML/JSON reports once complete. The server only binds
+to `127.0.0.1`; exposing it beyond your workstation is unsafe.
 
 ### Key Options
 - `--target` *(required)* – IPv4 or IPv6 address that has been approved for the
@@ -95,8 +129,9 @@ reconscript --target example.com --format pdf --outfile results/report.pdf
 - `--ports` – Space-separated list of TCP ports to probe. Defaults to common
   web stack ports (80, 443, 8080, 8443, 8000, 3000).
 - `--outfile` – Write the report to a file (format inferred from the extension).
-- `--format` / `--pdf` – Force a specific report format. Markdown, HTML, and PDF
-  outputs require `--outfile`.
+- `--format` / `--pdf` – Force a specific report format. By default the CLI emits
+  HTML into the `results/` directory. Use `--no-browser` to disable automatic
+  opening of HTML reports.
 - `--socket-timeout` / `--http-timeout` – Tune socket and HTTP timeouts (in
   seconds) to accommodate slower networks.
 - `--max-retries` / `--backoff` – Configure HTTP retry behaviour with
@@ -159,6 +194,12 @@ The generated JSON aligns with the following structure (full example located at
 **How can I respect strict rate limits?**
 : Increase `--throttle` (e.g. `--throttle 1.0`) to insert a one-second pause
   between each TCP connection attempt.
+
+**Why did PDF export fall back to HTML?**
+: ReconScript only attempts PDF generation when WeasyPrint and its GTK
+  dependencies are available. When they are absent you will see a warning and the
+  HTML report is preserved instead. Use `pip install .[pdf]` locally or build the
+  Docker image with `INCLUDE_PDF=true` for full PDF support.
 
 ## Ethical Operation
 ReconScript never attempts authentication, credential guessing, fuzzing, or
