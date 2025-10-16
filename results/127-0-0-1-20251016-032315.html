@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ReconScript Report — 127.0.0.1</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #0f172a;
+        --card: #ffffff;
+        --text: #0f172a;
+        --muted: #475569;
+        --accent: #1d4ed8;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #020617;
+          --card: #0b1220;
+          --text: #f8fafc;
+          --muted: #cbd5f5;
+        }
+      }
+      body {
+        margin: 0;
+        font-family: 'Segoe UI', 'Inter', 'Helvetica Neue', Arial, sans-serif;
+        background: linear-gradient(160deg, #0f172a, #1e293b);
+        color: var(--text);
+      }
+      header {
+        padding: 3.5rem 2rem;
+        text-align: center;
+      }
+      header h1 {
+        margin-bottom: 0.5rem;
+        font-weight: 600;
+        letter-spacing: 0.08rem;
+        text-transform: uppercase;
+      }
+      header .meta {
+        color: #e2e8f0;
+        display: inline-flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        justify-content: center;
+        font-size: 0.95rem;
+      }
+      main {
+        background: var(--card);
+        border-radius: 24px 24px 0 0;
+        padding: 3rem 2rem 4rem;
+        box-shadow: 0 -30px 60px rgba(15, 23, 42, 0.2);
+      }
+      h2 {
+        margin-top: 2.5rem;
+        text-transform: uppercase;
+        letter-spacing: 0.14rem;
+        font-size: 0.95rem;
+        color: var(--muted);
+      }
+      table.summary {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 1.5rem;
+        background: linear-gradient(135deg, rgba(29,78,216,0.08), rgba(14,116,144,0.12));
+        border-radius: 1rem;
+        overflow: hidden;
+      }
+      table.summary th,
+      table.summary td {
+        padding: 1rem 1.25rem;
+      }
+      table.summary th {
+        text-align: left;
+        width: 30%;
+        font-weight: 600;
+        color: var(--muted);
+        letter-spacing: 0.05rem;
+        text-transform: uppercase;
+        background: rgba(148, 163, 184, 0.12);
+      }
+      table.summary tr + tr td,
+      table.summary tr + tr th {
+        border-top: 1px solid rgba(148, 163, 184, 0.18);
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.35rem 0.75rem;
+        font-size: 0.75rem;
+        border-radius: 999px;
+        text-transform: uppercase;
+        letter-spacing: 0.08rem;
+        background: rgba(37, 99, 235, 0.15);
+        color: #1d4ed8;
+      }
+      .panel {
+        margin-top: 1.5rem;
+        border-radius: 1rem;
+        padding: 1.5rem;
+        background: rgba(15, 23, 42, 0.04);
+      }
+      .panel ul {
+        margin: 0;
+        padding-left: 1.2rem;
+      }
+      .panel li {
+        margin-bottom: 0.85rem;
+        line-height: 1.5;
+      }
+      .text-muted {
+        color: var(--muted);
+      }
+      .finding {
+        border-left: 4px solid rgba(248, 113, 113, 0.65);
+        padding-left: 1rem;
+        margin-bottom: 1.25rem;
+        background: rgba(254, 226, 226, 0.5);
+        border-radius: 0.75rem;
+        padding-top: 1rem;
+        padding-bottom: 1rem;
+      }
+      .finding code {
+        background: rgba(15, 23, 42, 0.08);
+        padding: 0.2rem 0.4rem;
+        border-radius: 0.35rem;
+      }
+      .finding pre {
+        background: rgba(15, 23, 42, 0.92);
+        color: #e0f2fe;
+        padding: 0.85rem 1rem;
+        border-radius: 0.75rem;
+        overflow-x: auto;
+        font-size: 0.85rem;
+      }
+      dl.meta {
+        display: grid;
+        grid-template-columns: minmax(160px, 1fr) 3fr;
+        gap: 1rem 1.5rem;
+        margin: 0;
+      }
+      dl.meta dt {
+        font-weight: 600;
+        color: var(--muted);
+        text-transform: uppercase;
+        font-size: 0.8rem;
+        letter-spacing: 0.08rem;
+      }
+      dl.meta dd {
+        margin: 0;
+        white-space: pre-wrap;
+        font-family: 'Fira Code', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+        font-size: 0.9rem;
+      }
+      footer {
+        margin-top: 3rem;
+        text-align: center;
+        color: var(--muted);
+        font-size: 0.8rem;
+        letter-spacing: 0.1rem;
+        text-transform: uppercase;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <span class="badge">ReconScript Report</span>
+      <h1>127.0.0.1</h1>
+      <p class="meta">
+        <span>Hostname N/A</span>
+        <span>Generated 16 October 2025 03:23 UTC</span>
+        <span>Findings 0</span>
+        <span>Duration 16.42s</span>
+      </p>
+    </header>
+    <main>
+      <section id="summary">
+        <h2>Summary</h2>
+        <table class="summary">
+          <tbody>
+            
+              <tr>
+                <th scope="row">Target</th>
+                <td>127.0.0.1</td>
+              </tr>
+            
+              <tr>
+                <th scope="row">Hostname</th>
+                <td>N/A</td>
+              </tr>
+            
+              <tr>
+                <th scope="row">Ports Scanned</th>
+                <td>3000</td>
+              </tr>
+            
+              <tr>
+                <th scope="row">Open Ports</th>
+                <td>None detected</td>
+              </tr>
+            
+              <tr>
+                <th scope="row">Findings</th>
+                <td>0</td>
+              </tr>
+            
+              <tr>
+                <th scope="row">Scan Duration</th>
+                <td>16.42 seconds</td>
+              </tr>
+            
+          </tbody>
+        </table>
+      </section>
+
+      <section id="findings">
+        <h2>Findings</h2>
+        
+          <div class="panel">
+            <p>No issues detected. Continue monitoring and verify manually where appropriate.</p>
+          </div>
+        
+      </section>
+
+      <section id="recommendations">
+        <h2>Recommendations</h2>
+        <div class="panel">
+          
+            <p>Maintain existing hardening and continue routine monitoring.</p>
+          
+        </div>
+      </section>
+
+      <section id="metadata">
+        <h2>Metadata</h2>
+        <div class="panel">
+          <dl class="meta">
+            
+              <dt>Tool Version</dt>
+              <dd>0.4.1</dd>
+            
+              <dt>Report Generated</dt>
+              <dd>2025-10-16T03:23:15Z</dd>
+            
+              <dt>Scan Started</dt>
+              <dd>2025-10-16T03:23:15Z</dd>
+            
+              <dt>Scan Completed</dt>
+              <dd>2025-10-16T03:23:32Z</dd>
+            
+              <dt>Scan Duration</dt>
+              <dd>16.42 seconds</dd>
+            
+              <dt>CLI Arguments</dt>
+              <dd>{
+  &#34;target&#34;: &#34;127.0.0.1&#34;,
+  &#34;hostname&#34;: null,
+  &#34;ports&#34;: [
+    3000
+  ],
+  &#34;outfile&#34;: null,
+  &#34;format&#34;: null,
+  &#34;pdf&#34;: false,
+  &#34;socket_timeout&#34;: 3.0,
+  &#34;http_timeout&#34;: 8.0,
+  &#34;max_retries&#34;: 2,
+  &#34;backoff&#34;: 0.5,
+  &#34;throttle&#34;: 0.2,
+  &#34;enable_ipv6&#34;: false,
+  &#34;dry_run&#34;: false,
+  &#34;no_color&#34;: false,
+  &#34;no_browser&#34;: false,
+  &#34;verbose&#34;: false,
+  &#34;quiet&#34;: false
+}</dd>
+            
+              <dt>robots.txt</dt>
+              <dd>robots.txt not present or inaccessible</dd>
+            
+          </dl>
+        </div>
+      </section>
+    </main>
+    <footer>
+      ReconScript v0.4.1 · Generated 2025-10-16T03:23:15Z
+    </footer>
+  </body>
+</html>

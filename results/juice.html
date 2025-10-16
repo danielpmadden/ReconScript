@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>ReconScript Report — 127.0.0.1</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: 'Liberation Sans', Arial, sans-serif;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      background: #f8f9fb;
+      color: #1f2933;
+    }
+    header.cover {
+      background: linear-gradient(135deg, #10172a, #1f2937);
+      color: #f8fafc;
+      padding: 48px;
+      text-align: center;
+      page-break-after: always;
+    }
+    header.cover h1 {
+      margin-bottom: 0.5rem;
+      font-size: 2.5rem;
+    }
+    header.cover .logo-placeholder {
+      border: 2px dashed rgba(255, 255, 255, 0.4);
+      display: inline-block;
+      padding: 12px 32px;
+      border-radius: 6px;
+      margin-bottom: 24px;
+      letter-spacing: 0.2rem;
+      text-transform: uppercase;
+    }
+    header.cover p {
+      margin: 0.4rem auto;
+      max-width: 720px;
+      line-height: 1.6;
+    }
+    main {
+      padding: 32px 48px 64px;
+    }
+    section {
+      margin-bottom: 40px;
+    }
+    h2 {
+      border-bottom: 2px solid #1f2937;
+      padding-bottom: 0.4rem;
+    }
+    table.summary {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 16px;
+      background: #ffffff;
+      border: 1px solid #cbd5f5;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    table.summary th,
+    table.summary td {
+      padding: 12px 16px;
+      text-align: left;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    table.summary th {
+      width: 25%;
+      background: #f1f5f9;
+      font-weight: 600;
+    }
+    ul.findings {
+      list-style: none;
+      padding-left: 0;
+    }
+    ul.findings li {
+      background: #ffffff;
+      border-left: 4px solid #ef4444;
+      padding: 12px 16px;
+      margin-bottom: 12px;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+    }
+    ul.findings li strong {
+      display: inline-block;
+      min-width: 110px;
+    }
+    ul.findings li pre {
+      background: #0f172a;
+      color: #f8fafc;
+      padding: 12px;
+      overflow-x: auto;
+      border-radius: 4px;
+    }
+    ul {
+      padding-left: 20px;
+    }
+    footer {
+      text-align: center;
+      padding: 24px;
+      font-size: 0.85rem;
+      color: #475569;
+      border-top: 1px solid #e2e8f0;
+      background: #f1f5f9;
+    }
+  </style>
+</head>
+<body>
+  <header class="cover">
+    <div class="logo-placeholder">ReconScript</div>
+    <h1>Security Reconnaissance Report</h1>
+    <p><strong>Target:</strong> 127.0.0.1</p>
+    <p><strong>Hostname:</strong> N/A</p>
+    <p><strong>Date:</strong> 16 October 2025 01:59 UTC</p>
+    <p>1 open ports discovered across 1 scanned endpoints.</p>
+  </header>
+  <main>
+    <section id="summary">
+      <h2>Summary</h2>
+      <table class="summary">
+        <tbody>
+          <tr><th>Target</th><td>127.0.0.1</td></tr>
+<tr><th>Hostname</th><td>N/A</td></tr>
+<tr><th>Ports Scanned</th><td>3000</td></tr>
+<tr><th>Open Ports</th><td>3000</td></tr>
+<tr><th>Findings</th><td>1</td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section id="findings">
+      <h2>Findings</h2>
+      <ul class="findings">
+<li>
+              <strong>Port 3000</strong> — <code>missing_security_headers</code>
+              <pre>[
+  &quot;Strict-Transport-Security&quot;,
+  &quot;Content-Security-Policy&quot;,
+  &quot;Referrer-Policy&quot;,
+  &quot;Permissions-Policy&quot;,
+  &quot;X-XSS-Protection&quot;
+]</pre>
+            </li>
+</ul>
+    </section>
+    <section id="recommendations">
+      <h2>Recommendations</h2>
+      <ul>
+  <li>Set Strict-Transport-Security and related headers on all web front-ends.</li>
+</ul>
+    </section>
+    <section id="metadata">
+      <h2>Metadata</h2>
+      <ul class="metadata">
+  <li>Tool Version: 0.4.0</li>
+  <li>Report Generated: 2025-10-16T01:59:46.843460Z</li>
+  <li>robots.txt not present or inaccessible</li>
+</ul>
+    </section>
+  </main>
+  <footer>
+    ReconScript v0.4.0 • Generated 2025-10-16T01:59:46.843460Z
+  </footer>
+</body>
+</html>

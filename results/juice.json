@@ -1,0 +1,66 @@
+{
+  "findings": [
+    {
+      "details": [
+        "Strict-Transport-Security",
+        "Content-Security-Policy",
+        "Referrer-Policy",
+        "Permissions-Policy",
+        "X-XSS-Protection"
+      ],
+      "issue": "missing_security_headers",
+      "port": 3000
+    }
+  ],
+  "hostname": null,
+  "http_checks": {
+    "3000": {
+      "body_snippet": "<!--   ~ Copyright (c) 2014-2025 Bjoern Kimminich & the OWASP Juice Shop contributors.   ~ SPDX-License-Identifier: MIT   -->  <!doctype html> <html lang=\"en\" data-beasties-container> <head>   <meta charset=\"utf-8\">   <title>OWASP Juice Shop</title>   <meta name=\"description\" content=\"Probably the most modern and sophisticated insecure web application\">   <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">   <link id=\"favicon\" rel=\"icon\" type=\"image/x-icon\" href=\"assets/public/favicon_js.ico\">   <link rel=\"stylesheet\" type=\"text/css\" href=\"//cdnjs.cloudflare.com/ajax/libs/cookieconsent2/3.1.0/cookieconsent.min.css\">   <script src=\"//cdnjs.cloudflare.com/ajax/libs/cookieconsent2/3.1.0/cookieconsent.min.js\"></script>   <script src=\"//cdnjs.cloudflare.com/ajax/libs/jquery/2.2.4/jquery.min.js\"></script>   <script>     window.addEventListener(\"load\", function(){       window.cookieconsent.initialise({         \"palette\": {           \"popup\": { \"background\": \"var(--theme-primary)\", \"text\": \"var(--theme-text)\" },           \"button\": { \"background\": \"var(--theme-accent)\", \"text\": \"var(--theme-text)\" }         },         \"theme\": \"classic\",         \"position\": \"bottom-right\",         \"content\": { \"message\": \"This website uses fruit cookies to ensure you get the juiciest tracking experience.\", \"dismiss\": \"Me want it!\", \"link\": \"But me wait!\", \"href\": \"https://www.youtube.com/watch?v=9PnbKL3wuH4\" }       })});   </script> <style>html{--mat-sys-on-surface:initial}.mat-app-background{background-color:var(--mat-app-background-color, var(--mat-sys-background, transparent));color:var(--mat-app-text-color, var(--mat-sys-on-background, inherit))}.mat-typography{font:400 14px/20px Roboto,sans-serif;letter-spacing:.0178571429em}html{--mat-tooltip-supporting-text-font:Roboto, sans-serif;--mat-tooltip-supporting-text-size:12px;--mat-tooltip-supporting-text-weight:400;--mat-tooltip-supporting-text-tracking:.0333333333em}html{--mat-app-background-color:#fafafa;--mat-app-tex",
+      "security_headers_check": {
+        "missing": [
+          "Strict-Transport-Security",
+          "Content-Security-Policy",
+          "Referrer-Policy",
+          "Permissions-Policy",
+          "X-XSS-Protection"
+        ],
+        "present": {
+          "X-Content-Type-Options": "nosniff",
+          "X-Frame-Options": "SAMEORIGIN"
+        }
+      },
+      "server_headers": {
+        "Accept-Ranges": "bytes",
+        "Access-Control-Allow-Origin": "*",
+        "Cache-Control": "public, max-age=0",
+        "Connection": "keep-alive",
+        "Content-Encoding": "br",
+        "Content-Type": "text/html; charset=UTF-8",
+        "Date": "Thu, 16 Oct 2025 01:48:19 GMT",
+        "ETag": "W/\"124fa-199eab13208\"",
+        "Feature-Policy": "payment 'self'",
+        "Keep-Alive": "timeout=5",
+        "Last-Modified": "Thu, 16 Oct 2025 01:45:05 GMT",
+        "Transfer-Encoding": "chunked",
+        "Vary": "Accept-Encoding",
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "SAMEORIGIN",
+        "X-Recruiting": "/#/jobs"
+      },
+      "status_code": 200,
+      "url": "http://127.0.0.1:3000/"
+    }
+  },
+  "open_ports": [
+    3000
+  ],
+  "ports": [
+    3000
+  ],
+  "robots": {
+    "note": "robots.txt not present or inaccessible"
+  },
+  "target": "127.0.0.1",
+  "timestamp": "2025-10-16T01:48:18.932847Z",
+  "version": "0.4.0"
+}
