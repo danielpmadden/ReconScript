@@ -1,3 +1,21 @@
+<p align="center">
+  <img src="https://img.shields.io/badge/Language-Python_3.9–3.13-blue?logo=python&logoColor=white" alt="Python">
+  <img src="https://img.shields.io/badge/Framework-Flask-green?logo=flask&logoColor=white" alt="Flask">
+  <img src="https://img.shields.io/badge/UI-HTML_+_JS-orange?logo=html5&logoColor=white" alt="HTML/JS">
+  <img src="https://img.shields.io/badge/Build-Docker_+_Compose-2496ED?logo=docker&logoColor=white" alt="Docker">
+  <img src="https://img.shields.io/badge/License-MIT-yellow?logo=open-source-initiative&logoColor=white" alt="License">
+  <img src="https://img.shields.io/github/v/release/YOUR_GITHUB_USERNAME/ReconScript?label=Version&color=blueviolet" alt="Version">
+  <img src="https://img.shields.io/github/last-commit/YOUR_GITHUB_USERNAME/ReconScript?label=Last%20Commit&color=informational" alt="Last Commit">
+  <img src="https://img.shields.io/badge/Status-Active-success?logo=git&logoColor=white" alt="Status">
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/OS-Windows_|_Linux_|_macOS-lightgrey?logo=windows&logoColor=white" alt="OS">
+  <img src="https://img.shields.io/badge/CLI-Compatible-critical?logo=console&logoColor=white" alt="CLI">
+  <img src="https://img.shields.io/badge/Web_UI-Enabled-brightgreen?logo=google-chrome&logoColor=white" alt="Web UI">
+  <img src="https://img.shields.io/github/actions/workflow/status/YOUR_GITHUB_USERNAME/ReconScript/tests.yml?label=Tests&logo=githubactions&logoColor=white" alt="Tests">
+</p>
+
 # ReconScript
 
 ReconScript is a friendly reconnaissance toolkit for authorised defenders, blue teams, and application owners. It performs **read-only** discovery against targets you are permitted to assess, then produces clean HTML/Markdown/JSON/PDF reports that are easy to share internally or with stakeholders.
