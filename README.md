@@ -13,13 +13,9 @@
 
 > ReconScript is a modern, non-destructive reconnaissance and reporting framework built for defenders, red teams on scoped engagements, and compliance-focused assessments. It automates TCP connect discovery, HTTP/TLS metadata collection, robots.txt/header reviews, and compiles professional-grade HTML, Markdown, JSON, or PDF reports—without intrusive exploitation.
 
-<p align="center">
-  <img src="https://via.placeholder.com/1200x650.png?text=ReconScript+Web+UI" alt="ReconScript Web UI preview">
-</p>
-
 ---
 
-## 🛰️ Project Overview
+## Project Overview
 
 - **Automated, safe reconnaissance** covering HTTP, HTTPS, TLS metadata, robots.txt, headers, and more using read-only probes.
 - **Multi-format reporting** delivered as HTML dashboards, machine-friendly JSON, clean Markdown, or PDF exports.
@@ -28,21 +24,21 @@
 
 ---
 
-## 🚀 Key Features
+## Key Features
 
-- **🛡️ Safe & Read-Only Scanning:** TCP connect probes with HTTP/TLS inspection—no intrusive exploits or payloads.
-- **🖥️ Web-Based UI:** Launch scans, follow live progress, and open reports directly from your browser.
-- **📝 Multiple Output Formats:** Export findings to HTML, JSON, Markdown, or PDF to match stakeholder needs.
-- **🧭 Cross-Platform:** Works on Windows, macOS, Linux, or packaged Docker containers.
-- **⚡ One-Click Start:** `start.sh`, `start.bat`, or `docker compose up` bootstraps the full stack instantly.
-- **🌐 Auto Browser Launch:** Automatically opens the UI once the service is ready.
-- **🗃️ Versioned Reports:** Timestamped report directories saved under `/results` for easy audit trails.
-- **📜 Rich Logging:** Colorized terminal output with timestamps for transparent activity tracking.
-- **🔌 Extensible Design:** Modular architecture poised for plugins, integrations, and advanced automations.
+- **Safe & Read-Only Scanning:** TCP connect probes with HTTP/TLS inspection—no intrusive exploits or payloads.
+- **Web-Based UI:** Launch scans, follow live progress, and open reports directly from your browser.
+- **Multiple Output Formats:** Export findings to HTML, JSON, Markdown, or PDF to match stakeholder needs.
+- **Cross-Platform:** Works on Windows, macOS, Linux, or packaged Docker containers.
+- **One-Click Start:** `start.sh`, `start.bat`, or `docker compose up` bootstraps the full stack instantly.
+- **Auto Browser Launch:** Automatically opens the UI once the service is ready.
+- **Versioned Reports:** Timestamped report directories saved under `/results` for easy audit trails.
+- **Rich Logging:** Colorized terminal output with timestamps for transparent activity tracking.
+- **Extensible Design:** Modular architecture poised for plugins, integrations, and advanced automations.
 
 ---
 
-## 🧰 Tech Stack
+## Tech Stack
 
 - **Language:** Python 3.9–3.13
 - **Framework:** Flask
@@ -53,7 +49,7 @@
 
 ---
 
-## 📦 Installation
+## Installation
 
 ### Option 1 — Quick Start (One Click)
 ```bash
@@ -82,7 +78,7 @@ docker run --rm -p 5000:5000 -v ${PWD}/results:/app/results reconscript
 
 ---
 
-## ⚙️ Usage
+## Usage
 
 ### From the Web UI
 1. Enter the authorized target IP or hostname.
@@ -98,7 +94,7 @@ python -m reconscript --target 127.0.0.1 --ports 80 443 8080 --format html
 
 ---
 
-## 🧱 Architecture Overview
+## Architecture Overview
 
 - `core.py`: TCP and HTTP reconnaissance engine.
 - `scanner.py`: Probe orchestration with retries and throttling.
@@ -127,7 +123,7 @@ python -m reconscript --target 127.0.0.1 --ports 80 443 8080 --format html
 
 ---
 
-## 📈 Example Output
+## Example Output
 
 ```text
 Scan Summary
@@ -140,7 +136,7 @@ PORT | SERVICE  | STATUS | NOTES
 
 ---
 
-## 🔍 Example Targets (Safe)
+## Example Targets (Safe)
 
 Use only approved or demonstration systems:
 
@@ -150,7 +146,7 @@ Use only approved or demonstration systems:
 
 ---
 
-## 🧠 Advanced Configuration
+## Advanced Configuration
 
 `.env` overrides core defaults:
 ```ini
@@ -164,7 +160,7 @@ ENABLE_IPV6=true
 
 ---
 
-## 📜 License & Legal Disclaimer
+## License & Legal Disclaimer
 
 - Licensed under the **MIT License**.
 - Designed strictly for **authorized, ethical security testing**.
@@ -172,7 +168,7 @@ ENABLE_IPV6=true
 
 ---
 
-## 🧩 Contributing
+## Contributing
 
 We welcome ideas, bug reports, and pull requests:
 
@@ -185,7 +181,7 @@ Continuous Integration is configured to lint, test, and validate builds automati
 
 ---
 
-## 🧭 Roadmap
+## Roadmap
 
 - Shodan / Censys enrichment integrations.
 - Background scan queue for scheduled assessments.
@@ -194,7 +190,7 @@ Continuous Integration is configured to lint, test, and validate builds automati
 
 ---
 
-## 👥 Credits
+## Credit
 
 - **Author:** Daniel Madden
 - **Frameworks:** Flask, Rich, WeasyPrint
