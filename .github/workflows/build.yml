@@ -28,7 +28,7 @@ jobs:
             libgdk-pixbuf-2.0-0 \
             libpango-1.0-0 \
             libpangocairo-1.0-0 \
-            libjpeg62-turbo \
+            libjpeg-turbo8 \
             libxml2 \
             libxslt1.1 \
             fonts-liberation \
