@@ -11,7 +11,6 @@
   <img src="https://img.shields.io/badge/OS-Windows_|_Linux_|_macOS-lightgrey?logo=windows&logoColor=white" alt="OS">
   <img src="https://img.shields.io/badge/CLI-Compatible-critical?logo=console&logoColor=white" alt="CLI">
   <img src="https://img.shields.io/badge/Web_UI-Enabled-brightgreen?logo=google-chrome&logoColor=white" alt="Web UI">
-  <img src="https://img.shields.io/github/actions/workflow/status/YOUR_GITHUB_USERNAME/ReconScript/tests.yml?label=Tests&logo=githubactions&logoColor=white" alt="Tests">
 </p>
 
 # ReconScript
