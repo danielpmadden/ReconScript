@@ -1,0 +1,26 @@
+{
+  "target": "127.0.0.1",
+  "hostname": "localhost",
+  "tool_version": "0.3.0",
+  "generated": "2024-05-15T12:00:00Z",
+  "summary": "Hypothetical OWASP Juice Shop assessment",
+  "findings": [
+    {
+      "port": 3000,
+      "issue": "missing_security_headers",
+      "details": [
+        "Strict-Transport-Security",
+        "Content-Security-Policy",
+        "Permissions-Policy"
+      ]
+    },
+    {
+      "port": 3000,
+      "issue": "session_cookie_flags",
+      "details": {
+        "secure": false,
+        "httponly": false
+      }
+    }
+  ]
+}

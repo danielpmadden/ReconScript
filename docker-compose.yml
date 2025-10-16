@@ -1,0 +1,11 @@
+version: "3.8"
+
+services:
+  reconscript:
+    build: .
+    image: reconscript:latest
+    command: ["--dry-run", "--target", "127.0.0.1", "--verbose"]
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./results:/app/results

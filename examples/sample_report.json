@@ -1,0 +1,96 @@
+{
+  "target": "203.0.113.5",
+  "hostname": "example.com",
+  "ports": [80, 443, 8080],
+  "tool_version": "0.3.0",
+  "timestamp": "2024-01-01T00:00:00Z",
+  "scan_config": {
+    "requested_ports": [80, 443, 8080],
+    "effective_ports": [80, 443, 8080],
+    "socket_timeout": 3.0,
+    "http_timeout": 8.0,
+    "throttle_ms": 250.0,
+    "max_ports": 12,
+    "enable_ipv6": false,
+    "dry_run": false,
+    "max_retries": 2,
+    "backoff": 0.5
+  },
+  "open_ports": [80, 443],
+  "http_checks": {
+    "80": {
+      "url": "http://example.com",
+      "status_code": 200,
+      "server_headers": {
+        "Content-Type": "text/html",
+        "Content-Security-Policy": "default-src 'self'",
+        "Server": "example"
+      },
+      "body_snippet": "<!doctype html>...",
+      "cookie_flags": {
+        "secure": false,
+        "httponly": true
+      },
+      "security_headers_check": {
+        "present": {
+          "Content-Security-Policy": "default-src 'self'"
+        },
+        "missing": [
+          "Strict-Transport-Security",
+          "X-Content-Type-Options"
+        ]
+      }
+    },
+    "443": {
+      "url": "https://example.com",
+      "status_code": 200,
+      "server_headers": {
+        "Content-Type": "text/html",
+        "Strict-Transport-Security": "max-age=63072000; includeSubDomains"
+      },
+      "body_snippet": "<!doctype html>...",
+      "cookie_flags": {
+        "secure": true,
+        "httponly": true
+      },
+      "security_headers_check": {
+        "present": {
+          "Strict-Transport-Security": "max-age=63072000; includeSubDomains"
+        },
+        "missing": [
+          "Content-Security-Policy"
+        ]
+      }
+    }
+  },
+  "tls_cert": {
+    "subject": {"commonName": "example.com"},
+    "issuer": {"commonName": "Example CA"},
+    "notBefore": "Jan  1 00:00:00 2024 GMT",
+    "notAfter": "Dec 31 23:59:59 2024 GMT",
+    "serialNumber": "01AABBCCDD"
+  },
+  "robots": {
+    "url": "https://example.com/robots.txt",
+    "body": "User-agent: *\nDisallow: /private"
+  },
+  "findings": [
+    {
+      "port": 80,
+      "issue": "missing_security_headers",
+      "details": [
+        "Strict-Transport-Security",
+        "X-Content-Type-Options"
+      ]
+    },
+    {
+      "port": 80,
+      "issue": "session_cookie_flags",
+      "details": {
+        "secure": false,
+        "httponly": true
+      }
+    }
+  ],
+  "runtime": 1.23
+}
