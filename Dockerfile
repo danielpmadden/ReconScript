@@ -65,7 +65,7 @@ LABEL maintainer="Safe Recon Team <security@example.com>" \
       org.opencontainers.image.title="ReconScript" \
       org.opencontainers.image.description="Read-only reconnaissance helper with dry-run, throttling, and safety controls." \
       org.opencontainers.image.licenses="MIT" \
-      org.opencontainers.image.version="0.4.0"
+      org.opencontainers.image.version="0.4.1"
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -110,5 +110,6 @@ COPY --chown=appuser:appuser HELP.md ./HELP.md
 COPY --from=builder --chown=appuser:appuser /app/templates ./templates
 COPY --from=builder --chown=appuser:appuser /app/web_ui.py ./web_ui.py
 
-ENTRYPOINT ["python", "-m", "reconscript"]
-CMD ["--help"]
+EXPOSE 5000
+
+ENTRYPOINT ["python", "-m", "reconscript.ui"]
