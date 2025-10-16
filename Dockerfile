@@ -1,11 +1,12 @@
 # syntax=docker/dockerfile:1
+# Modified by codex: 2024-05-08
 
 ############################################################
 # Builder image: installs dependencies and runs test suite #
 ############################################################
 FROM python:3.11-slim AS builder
 
-ARG INCLUDE_PDF=true
+ARG INCLUDE_PDF=false
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
@@ -39,7 +40,11 @@ COPY tests ./tests
 
 # Install the project with development extras for linting/testing utilities.
 RUN pip install --upgrade pip \
-    && pip install --no-cache-dir .[dev]
+    && if [ "$INCLUDE_PDF" = "true" ]; then \
+        pip install --no-cache-dir .[dev,pdf]; \
+       else \
+        pip install --no-cache-dir .[dev]; \
+       fi
 
 # Execute the unit tests to ensure build integrity.
 RUN pytest
@@ -52,7 +57,7 @@ RUN pip wheel --no-deps --wheel-dir /wheels .
 ##############################################
 FROM python:3.11-slim AS runtime
 
-ARG INCLUDE_PDF=true
+ARG INCLUDE_PDF=false
 
 LABEL maintainer="Safe Recon Team <security@example.com>" \
       org.opencontainers.image.title="ReconScript" \
@@ -88,7 +93,10 @@ RUN apt-get update \
 
 COPY --from=builder /wheels /wheels
 RUN pip install --no-cache-dir /wheels/* \
-    && rm -rf /wheels
+    && rm -rf /wheels \
+    && if [ "$INCLUDE_PDF" = "true" ]; then \
+        pip install --no-cache-dir "weasyprint>=61.2,<62"; \
+       fi
 
 # Create and use an unprivileged user for execution safety.
 RUN useradd -m appuser

@@ -8,6 +8,8 @@ assessments.
 
 from __future__ import annotations
 
+# Modified by codex: 2024-05-08
+
 import ipaddress
 import json
 import logging
@@ -16,7 +18,7 @@ import ssl
 import time
 from dataclasses import dataclass
 from http.cookies import SimpleCookie, CookieError
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 import requests
 from requests import Response
@@ -104,7 +106,7 @@ def create_http_session(timeout: float, max_retries: int, backoff: float) -> req
     """Construct a ``requests`` session with retry handling."""
 
     # Retry policy avoids aggressive traffic while handling transient network errors.
-    retry_policy = Retry(
+    retry_policy = FriendlyRetry(
         total=max_retries,
         read=max_retries,
         connect=max_retries,
@@ -260,7 +262,10 @@ def probe_http_service(
         LOGGER.warning("HTTP request to %s timed out", url)
         return {"error": "request timed out"}
     except requests.exceptions.RequestException as error:
-        LOGGER.warning("HTTP request to %s failed: %s", url, error)
+        if _is_connection_refused(error):
+            LOGGER.info("Connection refused for %s; treating as closed port", url)
+        else:
+            LOGGER.warning("HTTP request to %s failed: %s", url, error)
         return {"error": str(error)}
 
     external_redirect = _detect_external_redirect(origin_host, response)
@@ -376,6 +381,22 @@ def serialize_results(data: Dict[str, object]) -> str:
     """Return a JSON-formatted string for reporting."""
 
     return json.dumps(data, indent=2)
+
+
+def _is_connection_refused(error: requests.exceptions.RequestException) -> bool:
+    """Inspect an exception chain for connection refusal signals."""
+
+    seen: set[int] = set()
+    current: Optional[BaseException] = error
+    while current and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, ConnectionRefusedError):
+            return True
+        message = str(current).lower()
+        if "winerror 10061" in message or "newconnectionerror" in message:
+            return True
+        current = current.__cause__ or current.__context__
+    return False
 def _detect_external_redirect(expected_host: Optional[str], response: Response) -> Optional[str]:
     """Return the first URL that leaves the expected host, if any."""
 
@@ -389,4 +410,26 @@ def _detect_external_redirect(expected_host: Optional[str], response: Response) 
         if host and host != expected:
             return hop.url
     return None
+
+_RETRY_NOTICES: Set[str] = set()
+
+
+class FriendlyRetry(Retry):
+    """Retry policy that logs at most once per endpoint."""
+
+    def increment(self, method=None, url=None, response=None, error=None, _pool=None, _stacktrace=None):  # type: ignore[override]
+        endpoint = None
+        if url:
+            endpoint = urlparse(url).netloc or url
+        elif _pool is not None:
+            endpoint = getattr(_pool, "host", None)
+
+        if endpoint and endpoint not in _RETRY_NOTICES:
+            LOGGER.warning(
+                "Retries detected for %s; continuing with exponential backoff.",
+                endpoint,
+            )
+            _RETRY_NOTICES.add(endpoint)
+
+        return super().increment(method=method, url=url, response=response, error=error, _pool=_pool, _stacktrace=_stacktrace)
 

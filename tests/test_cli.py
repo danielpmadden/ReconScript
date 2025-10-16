@@ -1,3 +1,5 @@
+# Modified by codex: 2024-05-08
+
 from unittest import mock
 
 from reconscript import cli
@@ -20,6 +22,7 @@ def test_main_passes_dry_run_and_outfile(tmp_path):
         mock.patch("reconscript.cli.write_report") as mock_writer,
         mock.patch("reconscript.cli.Console") as mock_console,
     ):
+        mock_writer.return_value = (outfile, "json")
         console_instance = mock.Mock()
         console_instance.print = mock.Mock()
         mock_console.return_value = console_instance
@@ -47,6 +50,7 @@ def test_main_respects_format_flag(tmp_path):
         mock.patch("reconscript.cli.write_report") as mock_writer,
         mock.patch("reconscript.cli.Console") as mock_console,
     ):
+        mock_writer.return_value = (outfile, "html")
         console_instance = mock.Mock()
         console_instance.print = mock.Mock()
         mock_console.return_value = console_instance
