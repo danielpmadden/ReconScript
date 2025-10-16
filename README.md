@@ -35,13 +35,15 @@ ReconScript targets Python 3.9 or later.
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install .
+pip install -r requirements.lock
+pip install --no-deps .
 ```
 
-For development or testing, install pytest as well:
+For development or testing, install the optional tooling bundle:
 
 ```bash
-pip install .[dev]
+pip install -r requirements.lock
+pip install --no-deps .[dev]
 ```
 
 ### Verify Installation
