@@ -31,35 +31,69 @@ Markdown, HTML, and PDF reports.
 - **Unified report pipeline** that renders JSON, Markdown, HTML, and PDF outputs
   using consistent templates and metadata.
 
-## Installation
-ReconScript targets Python 3.9 or later.
+## Quick Start (One-Click Launch)
+ReconScript is now bundled with a portable launcher that bootstraps a virtual
+environment, installs pinned dependencies, and opens the web dashboard in your
+default browser.
+
+### Windows
+1. Install Python 3.9–3.13 if it is not already available on your system.
+2. Double-click `start.bat` (or run `start.ps1` from PowerShell for richer output).
+3. The first run may take a minute while dependencies are installed. Your browser
+   will open to <http://127.0.0.1:5000/> and the scan results will be written to
+   the `results/` folder automatically.
+
+### macOS / Linux
+1. Ensure Python 3.9–3.13 is on your `PATH`.
+2. Run `python3 start.py` from the project directory.
+3. The launcher creates `.venv/`, installs everything listed in `requirements.txt`,
+   opens the UI, and stores reports in `results/`.
+
+> **Tip:** If dependency installation fails because of permissions, re-run the
+> launcher from an elevated shell (Administrator on Windows or `sudo` on Unix).
+
+## Docker Usage
+
+Build and run the containerised ReconScript UI with the following commands:
+
+```bash
+docker build -t reconscript .
+docker run -p 5000:5000 -v "$(pwd)/results:/app/results" reconscript
+```
+
+The container exposes the Flask UI on port 5000 and persists generated reports to
+your local `results/` directory via the bind mount. Browser auto-opening is
+disabled inside the container — visit <http://127.0.0.1:5000/> manually.
+
+## Local Installation (Manual Option)
+
+The launcher covers most scenarios, but you can still install ReconScript as a
+traditional Python package:
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.lock
+source .venv/bin/activate  # or .venv\Scripts\activate on Windows
+pip install -r requirements.txt
 pip install --no-deps .
 ```
 
 For development or testing, install the optional tooling bundle:
 
 ```bash
-pip install -r requirements.lock
 pip install --no-deps .[dev]
 ```
 
-### Optional PDF support
-
-PDF export now ships as an optional extra so that the base installation remains
-lightweight. Install WeasyPrint and the required dependencies only when you need
-it:
+All runtime dependencies — including WeasyPrint and its helpers — are already
+pinned in `requirements.txt`. When running outside Docker you may still need the
+system libraries required by WeasyPrint (Cairo, Pango, etc.). On Debian/Ubuntu
+install them with:
 
 ```bash
-pip install --no-deps .[pdf]
+sudo apt-get install libcairo2 libgdk-pixbuf-2.0-0 libpango-1.0-0 libpangocairo-1.0-0 libjpeg62-turbo libxml2 libxslt1.1 fonts-liberation shared-mime-info
 ```
 
 ### Verify Installation
-Confirm the package imports cleanly and the command is available:
+Confirm the package imports cleanly and the CLI entry point is available:
 
 ```bash
 python -m reconscript --help
@@ -74,60 +108,70 @@ Execute the unit tests with pytest to validate local changes:
 pytest
 ```
 
+## Example First-Run Output
+
+```text
+Creating isolated Python environment in .venv …
+Switching to the project virtual environment …
+Resolving Python requirements (this may take a moment)…
+[green]Dependencies installed successfully.[/green]
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ ReconScript v0.4.2           ┃
+┃ Author: David █████          ┃
+┃ "Automated Reconnaissance"   ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+Results will be stored in /Users/alex/Projects/ReconScript/results
+Starting ReconScript web UI on 127.0.0.1:5000 …
+ * Serving Flask app 'reconscript.ui'
+ * Debug mode: off
+```
+
+The launcher automatically opens <http://127.0.0.1:5000/> and refreshes the
+browser when you initiate a scan. Reports (HTML + JSON) are written to the
+timestamped files inside `results/`.
+
 ## Usage
-Run the CLI via the console script or Python module entry point:
+
+### Web UI
+
+The local dashboard exposes the most common ReconScript options:
+
+- **Target IP / Range** – Accepts IPv4 or IPv6 addresses. Input validation is
+  enforced before any network activity begins.
+- **Hostname (optional)** – Overrides the HTTP `Host` header and TLS SNI for
+  name-based services.
+- **Ports** – Comma-separated ports or ranges (for example `80,443,8000-8100`).
+  The UI deduplicates values and ensures they stay within 1–65535.
+- **Start Scan** – Launches a background job that streams status updates,
+  detailed logs, and a progress bar via Server-Sent Events.
+
+When a scan finishes you receive:
+
+- Real-time console log updates and a coloured progress bar.
+- A summary card showing scan duration, port coverage, and findings count.
+- A direct link to the generated report which opens in a new browser tab.
+- Automatic HTML + JSON output saved under `results/`, ready for sharing.
+
+### CLI (Optional)
+
+ReconScript still ships with the original CLI for automation workflows:
 
 ```bash
-reconscript --target 203.0.113.5 --hostname example.com --outfile recon.json
+reconscript --target 203.0.113.5 --hostname example.com --outfile results/scan.json
 ```
 
-The same invocation is available through `python -m reconscript`. Full guidance
-is available in [HELP.md](HELP.md).
+Use `python -m reconscript` if you prefer calling the module directly. Full
+guidance remains available in [HELP.md](HELP.md).
 
-### Report Formats & default HTML output
-
-ReconScript now defaults to producing an HTML report when `--format` is not
-specified. The CLI writes results to the `results/` directory using a timestamped
-filename and automatically opens the HTML report in your default browser after a
-successful run. Disable the auto-open behaviour with `--no-browser`.
-
-Use the familiar flags to override the format or target a specific output file:
-
-```bash
-reconscript --target 203.0.113.5 --outfile results/scan.json --format json
-reconscript --target 203.0.113.5 --outfile results/scan.md --format markdown
-reconscript --target 203.0.113.5 --outfile results/scan.pdf --format pdf
-```
-
-> **PDF prerequisites** – Install the optional extras (`pip install .[pdf]`) or
-> build the Docker image with `--build-arg INCLUDE_PDF=true`. When the platform
-> lacks WeasyPrint/GTK libraries ReconScript automatically falls back to HTML and
-> prints a friendly warning.
-
-The CLI always stores a JSON copy of the results alongside other formats to make
-automation workflows simple.
-
-### Local Web UI
-
-A lightweight Flask interface is included for local demonstrations and quick
-scans:
-
-```bash
-pip install --no-deps .[dev]  # includes Flask
-python web_ui.py
-```
-
-Open <http://127.0.0.1:5000/> in your browser, enter a localhost or RFC1918
-target, and start the scan. The UI keeps jobs in-memory, streams status updates,
-and links to the generated HTML/JSON reports once complete. The server only binds
-to `127.0.0.1`; exposing it beyond your workstation is unsafe.
-
-### Key Options
+The CLI accepts the same flags as before (`--format`, `--ports`, `--pdf`,
+timeouts, throttling, etc.) and continues to write all artefacts into the
+`results/` directory.
+### CLI Key Options
 - `--target` *(required)* – IPv4 or IPv6 address that has been approved for the
   assessment. Validation is enforced before any network activity occurs.
 - `--hostname` – Host header and TLS SNI value for name-based services.
 - `--ports` – Space-separated list of TCP ports to probe. Defaults to common
-  web stack ports (80, 443, 8080, 8443, 8000, 3000).
+  web stack ports (`80 443 8080 8443 8000 3000`).
 - `--outfile` – Write the report to a file (format inferred from the extension).
 - `--format` / `--pdf` – Force a specific report format. By default the CLI emits
   HTML into the `results/` directory. Use `--no-browser` to disable automatic
