@@ -1,0 +1,29 @@
+# Version control and local tooling
+.git
+.gitignore
+.vscode
+.idea
+
+# Python cache and virtual environments
+__pycache__/
+*.py[cod]
+*.so
+*.pyd
+.pytest_cache/
+.mypy_cache/
+ruff_cache/
+.env
+.venv/
+
+# Build outputs
+build/
+dist/
+.eggs/
+*.egg-info/
+
+# Local results or artifacts
+results/
+*.log
+*.tmp
+
+# Tests are retained in the build context so the builder stage can execute pytest
