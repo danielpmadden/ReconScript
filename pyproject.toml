@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "reconscript"
-version = "0.2.0"
+version = "0.4.0"
 description = "Safe reconnaissance helper for authorized assessments only; use responsibly within agreed scope."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -13,13 +13,16 @@ authors = [
   {name = "Safe Recon Team", email = "security@example.com"}
 ]
 dependencies = [
-  "requests>=2.25"
+  "requests>=2.25",
+  "rich>=13",
+  "weasyprint>=61",
 ]
 
 [project.optional-dependencies]
 dev = [
   "pytest>=7.0",
-  "responses>=0.25"
+  "responses>=0.25",
+  "flake8>=6.0"
 ]
 keywords = ["reconnaissance", "security", "safety"]
 classifiers = [
@@ -40,9 +43,13 @@ Repository = "https://example.com/reconscript/repo"
 
 [project.scripts]
 safe-recon = "reconscript.cli:main"
+reconscript = "reconscript.cli:main"
 
 [tool.setuptools]
 packages = ["reconscript"]
+
+[tool.setuptools.package-data]
+"reconscript" = ["templates/*.html"]
 
 [tool.pytest.ini_options]
 addopts = "-ra"

@@ -22,6 +22,7 @@ import requests
 from requests import Response
 from requests.adapters import HTTPAdapter
 from urllib3.util import Retry
+from urllib.parse import urlparse
 
 LOGGER = logging.getLogger(__name__)
 
@@ -40,7 +41,7 @@ DEFAULT_MAX_RETRIES: int = 2
 DEFAULT_BACKOFF: float = 0.5
 
 # User agent string highlights defensive purpose for transparency.
-USER_AGENT: str = "ReconScript/0.2 (authorized security review)"
+USER_AGENT: str = "ReconScript/0.4 (authorized security review)"
 
 
 @dataclass
@@ -247,6 +248,9 @@ def probe_http_service(
     else:
         url = f"{scheme}://{host_or_ip}:{port}"
 
+    parsed_origin = urlparse(url)
+    origin_host = parsed_origin.hostname
+
     try:
         response = session.get(url, allow_redirects=True)
     except requests.exceptions.SSLError as error:
@@ -258,6 +262,11 @@ def probe_http_service(
     except requests.exceptions.RequestException as error:
         LOGGER.warning("HTTP request to %s failed: %s", url, error)
         return {"error": str(error)}
+
+    external_redirect = _detect_external_redirect(origin_host, response)
+    if external_redirect:
+        LOGGER.warning("Blocked redirect from %s to external host %s", url, external_redirect)
+        return {"error": "redirected to external host", "redirect_url": external_redirect}
 
     result: Dict[str, object] = {
         "url": response.url,
@@ -315,6 +324,10 @@ def fetch_robots(session: requests.Session, host_or_ip: str) -> Dict[str, object
         except requests.exceptions.RequestException as error:
             LOGGER.debug("Robots fetch failed for %s: %s", url, error)
             continue
+        external_redirect = _detect_external_redirect(urlparse(url).hostname, response)
+        if external_redirect:
+            LOGGER.warning("Skipping robots.txt redirect to external host %s", external_redirect)
+            continue
         if response.status_code == 200 and response.text.strip():
             return {"url": url, "body": response.text[:2000]}
     return {"note": "robots.txt not present or inaccessible"}
@@ -363,3 +376,17 @@ def serialize_results(data: Dict[str, object]) -> str:
     """Return a JSON-formatted string for reporting."""
 
     return json.dumps(data, indent=2)
+def _detect_external_redirect(expected_host: Optional[str], response: Response) -> Optional[str]:
+    """Return the first URL that leaves the expected host, if any."""
+
+    if not expected_host:
+        return None
+
+    expected = expected_host.lower()
+    for hop in (*response.history, response):
+        parsed = urlparse(hop.url)
+        host = (parsed.hostname or "").lower()
+        if host and host != expected:
+            return hop.url
+    return None
+

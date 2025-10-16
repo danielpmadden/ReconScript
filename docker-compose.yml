@@ -4,7 +4,14 @@ services:
   reconscript:
     build: .
     image: reconscript:latest
-    command: ["--dry-run", "--target", "127.0.0.1", "--verbose"]
+    command: [
+      "--dry-run",
+      "--target",
+      "127.0.0.1",
+      "--verbose",
+      "--outfile",
+      "/app/results/dry-run.json"
+    ]
     environment:
       - PYTHONUNBUFFERED=1
     volumes:

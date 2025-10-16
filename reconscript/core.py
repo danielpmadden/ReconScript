@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import datetime as _dt
 import logging
-from pathlib import Path
 from typing import Dict, Optional
 
 from . import __version__
@@ -42,7 +41,7 @@ def run_recon(
     backoff: float = DEFAULT_BACKOFF,
     throttle: float = 0.0,
     enable_ipv6: bool = False,
-    outfile: Optional[Path] = None,
+    dry_run: bool = False,
 ) -> Dict[str, object]:
     """Execute the ReconScript workflow and optionally persist the report."""
 
@@ -63,9 +62,6 @@ def run_recon(
         enable_ipv6=enable_ipv6,
     )
 
-    # Reuse a single HTTP session to amortise connection setup and share retries.
-    session = create_http_session(timeout=http_timeout, max_retries=max_retries, backoff=backoff)
-
     report: Dict[str, object] = {
         "target": normalized_target,
         "hostname": hostname,
@@ -74,37 +70,56 @@ def run_recon(
         "timestamp": _dt.datetime.utcnow().isoformat() + "Z",
     }
 
-    LOGGER.info("Starting TCP connect scan of %s on %s", normalized_target, list(validated_ports))
-    open_ports = tcp_connect_scan(config, validated_ports, throttle)
-    report["open_ports"] = open_ports
+    if dry_run:
+        LOGGER.info("Dry-run enabled; skipping network activity")
+        report.update(
+            {
+                "open_ports": [],
+                "http_checks": {},
+                "tls_cert": None,
+                "robots": {"note": "dry-run: network operations skipped"},
+                "findings": [],
+            }
+        )
+        REPORT_LOGGER.info(serialize_results(report))
+        return report
 
-    http_results: Dict[int, Dict[str, object]] = {}
-    if open_ports:
-        LOGGER.info("Evaluating HTTP services on detected ports")
-    for port in open_ports:
-        if port in HTTP_PORTS:
-            LOGGER.debug("Fetching HTTP metadata from port %s", port)
-            http_results[port] = probe_http_service(session, hostname or normalized_target, port)
-    report["http_checks"] = http_results
+    session = None
+    try:
+        # Reuse a single HTTP session to amortise connection setup and share retries.
+        session = create_http_session(
+            timeout=http_timeout, max_retries=max_retries, backoff=backoff
+        )
 
-    if any(port in (443, 8443) for port in open_ports):
-        tls_port = 443 if 443 in open_ports else 8443
-        LOGGER.info("Gathering TLS certificate details from port %s", tls_port)
-        report["tls_cert"] = fetch_tls_certificate(config, tls_port)
+        LOGGER.info("Starting TCP connect scan of %s on %s", normalized_target, list(validated_ports))
+        open_ports = tcp_connect_scan(config, validated_ports, throttle)
+        report["open_ports"] = open_ports
 
-    LOGGER.info("Requesting robots.txt for situational awareness")
-    report["robots"] = fetch_robots(session, hostname or normalized_target)
+        http_results: Dict[int, Dict[str, object]] = {}
+        if open_ports:
+            LOGGER.info("Evaluating HTTP services on detected ports")
+        for port in open_ports:
+            if port in HTTP_PORTS:
+                LOGGER.debug("Fetching HTTP metadata from port %s", port)
+                http_results[port] = probe_http_service(session, hostname or normalized_target, port)
+        report["http_checks"] = http_results
 
-    report["findings"] = generate_findings(http_results)
+        if any(port in (443, 8443) for port in open_ports):
+            tls_port = 443 if 443 in open_ports else 8443
+            LOGGER.info("Gathering TLS certificate details from port %s", tls_port)
+            report["tls_cert"] = fetch_tls_certificate(config, tls_port)
 
-    if outfile:
-        LOGGER.info("Writing report to %s", outfile)
-        outfile.write_text(serialize_results(report), encoding="utf-8")
-    else:
-        # Emit the report via logging so operators can capture structured output.
+        LOGGER.info("Requesting robots.txt for situational awareness")
+        report["robots"] = fetch_robots(session, hostname or normalized_target)
+
+        report["findings"] = generate_findings(http_results)
+
         REPORT_LOGGER.info(serialize_results(report))
 
-    return report
+        return report
+    finally:
+        if session is not None:
+            session.close()
 
 __all__ = [
     "run_recon",
