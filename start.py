@@ -210,6 +210,7 @@ def _run_app(host: str, port: int) -> None:
 
 
 def main() -> None:
+    global console  # must be declared before first use
     os.chdir(ROOT)
 
     version_warning: str | None = None
@@ -240,7 +241,7 @@ def main() -> None:
     python_executable = Path(sys.executable)
     ensure_dependencies(python_executable)
 
-    global console  # Refresh Rich console now that dependencies may be available
+    # ✅ Reinitialize Rich console after dependencies are ensured
     console = _create_console()
     render_banner()
     if version_warning:
