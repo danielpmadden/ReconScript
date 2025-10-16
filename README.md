@@ -2,7 +2,7 @@
 
 ReconScript is a friendly reconnaissance toolkit for authorised defenders, blue teams, and application owners. It performs **read-only** discovery against targets you are permitted to assess, then produces clean HTML/Markdown/JSON/PDF reports that are easy to share internally or with stakeholders.
 
-> ⚠️ **Authorised use only.** Always obtain written permission before scanning, obey engagement scope and rate limits, and comply with local laws. ReconScript is designed for defensive validation, not intrusion.
+> **Authorised use only.** Always obtain written permission before scanning, obey engagement scope and rate limits, and comply with local laws. ReconScript is designed for defensive validation, not intrusion.
 
 ## Quick Start
 
@@ -44,9 +44,9 @@ Docker images honour the same `.env` settings. Reports appear under the mounted 
   ```
 
 ## Web dashboard
-- ✅ Automatic readiness polling with a “Preparing scan engine…” status indicator.
-- ✅ Live progress via Server-Sent Events and a Rich-styled console log.
-- ✅ Report library at `/results` serving HTML reports directly from the `results/` folder.
+- Automatic readiness polling with a “Preparing scan engine…” status indicator.
+- Live progress via Server-Sent Events and a Rich-styled console log.
+- Report library at `/results` serving HTML reports directly from the `results/` folder.
 
 Screenshot placeholders:
 - ![ReconScript dashboard placeholder](docs/screenshots/dashboard.png)
