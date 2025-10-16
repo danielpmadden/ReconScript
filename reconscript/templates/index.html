@@ -5,6 +5,16 @@
 {% block content %}
 <section class="space-y-8">
   <div class="surface rounded-2xl border border-slate-800 bg-slate-900/60 p-8 shadow-xl shadow-slate-900/40">
+    <div
+      id="app-status"
+      class="status-banner"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+    >
+      <span id="app-status-icon" class="status-icon spinner" aria-hidden="true"></span>
+      <span id="app-status-text" class="status-text">Initializing ReconScript engine…</span>
+    </div>
     <h1 class="text-3xl font-semibold text-sky-200 mb-6 flex items-center gap-3">
       <span>🛰️</span>
       Run a ReconScript Scan

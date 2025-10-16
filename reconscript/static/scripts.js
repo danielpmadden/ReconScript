@@ -18,6 +18,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const aboutPanel = document.getElementById('about');
   const aboutTriggers = document.querySelectorAll('.about-trigger');
   const closeAbout = document.querySelector('.close-about');
+  const appStatus = document.getElementById('app-status');
+  const appStatusText = document.getElementById('app-status-text');
+  const appStatusIcon = document.getElementById('app-status-icon');
+  const formControls = form ? Array.from(form.querySelectorAll('input, select, button')) : [];
+  let healthReady = false;
 
   const THEME_KEY = 'reconscript-theme';
   const storedTheme = localStorage.getItem(THEME_KEY);
@@ -54,6 +59,64 @@ document.addEventListener('DOMContentLoaded', () => {
         aboutPanel.hidden = true;
       }
     });
+  }
+
+  const setFormDisabled = (disabled) => {
+    formControls.forEach((control) => {
+      control.disabled = disabled;
+      control.classList.toggle('opacity-60', disabled);
+      control.classList.toggle('cursor-not-allowed', disabled);
+      if (!disabled) {
+        control.classList.remove('opacity-60', 'cursor-not-allowed');
+      }
+    });
+  };
+
+  const markReady = () => {
+    if (healthReady) return;
+    healthReady = true;
+    if (appStatus) {
+      appStatus.classList.add('ready');
+      appStatus.removeAttribute('aria-busy');
+    }
+    if (appStatusText) {
+      appStatusText.textContent = 'Ready for scanning';
+    }
+    if (appStatusIcon) {
+      appStatusIcon.classList.remove('spinner');
+      appStatusIcon.textContent = '✅';
+    }
+    setFormDisabled(false);
+  };
+
+  const pollHealth = async () => {
+    try {
+      const response = await fetch('/health', { cache: 'no-store' });
+      if (!response.ok) throw new Error('unhealthy');
+      const payload = await response.json();
+      if (payload.status === 'ok') {
+        markReady();
+        return true;
+      }
+    } catch (error) {
+      /* ignore – keep polling */
+    }
+    return false;
+  };
+
+  const startHealthPolling = () => {
+    const attempt = async () => {
+      const ready = await pollHealth();
+      if (!ready) {
+        window.setTimeout(attempt, 1000);
+      }
+    };
+    attempt();
+  };
+
+  if (formControls.length) {
+    setFormDisabled(true);
+    startHealthPolling();
   }
 
   const appendLog = (text, level = 'info') => {

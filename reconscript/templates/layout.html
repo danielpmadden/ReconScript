@@ -33,8 +33,9 @@
         </div>
       </main>
 
-      <footer class="surface border-t border-slate-800 bg-slate-900/80 px-4 py-6 text-center text-xs text-slate-500">
-        ReconScript v{{ version }} — {{ changelog_summary or 'See CHANGELOG.md for recent updates.' }}
+      <footer class="surface border-t border-slate-800 bg-slate-900/80 px-4 py-6 text-center text-xs text-slate-500 space-y-1">
+        <div>ReconScript {{ version }} | Python {{ python_version }} | {{ environment }}</div>
+        <div>{{ changelog_summary or 'See CHANGELOG.md for recent updates.' }}</div>
       </footer>
     </div>
 

@@ -3,8 +3,7 @@
 
 from __future__ import annotations
 
-import hashlib
-import importlib
+import atexit
 import os
 import subprocess
 import sys
@@ -13,51 +12,32 @@ import time
 import venv
 import webbrowser
 from pathlib import Path
-from typing import Dict, List
+from typing import List
+
+from install_dependencies import create_console, install_dependencies
+
 
 ROOT = Path(__file__).resolve().parent
-REQUIREMENTS_FILE = ROOT / "requirements.txt"
 DEFAULT_PORT = 5000
-REQUIREMENT_IMPORTS: Dict[str, str] = {
-    "requests": "requests",
-    "urllib3": "urllib3",
-    "jinja2": "jinja2",
-    "flask": "flask",
-    "rich": "rich",
-    "tabulate": "tabulate",
-    "colorama": "colorama",
-    "weasyprint": "weasyprint",
-    "fonttools": "fontTools",
-    "tinycss2": "tinycss2",
-    "cssselect2": "cssselect2",
-    "pyphen": "pyphen",
-    "pydyf": "pydyf",
-    "markupsafe": "markupsafe",
-    "itsdangerous": "itsdangerous",
-    "werkzeug": "werkzeug",
-}
 
 
-def _create_console():  # type: ignore[return-value]
-    try:
-        from rich.console import Console
+class _StreamMultiplexer:
+    """Mirror writes to stdout/stderr into the on-disk log."""
 
-        return Console(highlight=False)
-    except Exception:  # pragma: no cover - fallback path when Rich is absent
-        class _PlainConsole:
-            def print(self, *values, **kwargs) -> None:
-                print(*values)
+    def __init__(self, *streams):
+        self._streams = streams
 
-            def rule(self, text: str) -> None:
-                print(f"--- {text} ---")
+    def write(self, data: str) -> None:
+        for stream in self._streams:
+            stream.write(data)
+            stream.flush()
 
-            def log(self, *values, **kwargs) -> None:
-                print(*values)
-
-        return _PlainConsole()
+    def flush(self) -> None:  # pragma: no cover - compatibility shim
+        for stream in self._streams:
+            stream.flush()
 
 
-console = _create_console()
+console = create_console()
 
 
 def render_banner() -> None:
@@ -85,7 +65,19 @@ def in_virtualenv() -> bool:
 def in_docker() -> bool:
     if Path("/.dockerenv").exists():
         return True
-    return os.environ.get("RUNNING_IN_DOCKER") == "1"
+    if os.environ.get("RUNNING_IN_DOCKER") == "1":
+        return True
+    if os.environ.get("WSL_INTEROP"):
+        return True
+    if Path("/var/run/docker.sock").exists():
+        return True
+    try:
+        cgroup = Path("/proc/self/cgroup")
+        if cgroup.exists() and "docker" in cgroup.read_text():
+            return True
+    except OSError:
+        pass
+    return False
 
 
 def venv_python_path(venv_dir: Path) -> Path:
@@ -106,93 +98,30 @@ def ensure_virtualenv() -> Path:
     return python_path
 
 
-def _hash_requirements(path: Path) -> str:
-    data = path.read_bytes()
-    return hashlib.sha256(data).hexdigest()
 
-
-def _marker_path() -> Path:
-    preferred = ROOT / ".venv" / ".requirements-hash"
-    if preferred.parent.exists():
-        return preferred
-    return ROOT / ".requirements-hash"
-
-
-def _load_marker(marker: Path) -> str | None:
-    try:
-        return marker.read_text().strip()
-    except FileNotFoundError:
-        return None
-
-
-def _store_marker(marker: Path, value: str) -> None:
-    marker.parent.mkdir(parents=True, exist_ok=True)
-    marker.write_text(value)
-
-
-def _missing_modules(modules: Dict[str, str]) -> List[str]:
-    missing: List[str] = []
-    for requirement, module_name in modules.items():
-        try:
-            importlib.import_module(module_name)
-        except Exception:
-            missing.append(requirement)
-    return missing
-
-
-def ensure_dependencies(python_executable: Path) -> None:
-    if not REQUIREMENTS_FILE.exists():
-        raise FileNotFoundError("requirements.txt is missing; cannot install dependencies.")
-
-    expected_hash = _hash_requirements(REQUIREMENTS_FILE)
-    marker = _marker_path()
-    recorded_hash = _load_marker(marker)
-    missing = _missing_modules(REQUIREMENT_IMPORTS)
-    if missing:
-        console.print(f"Installing missing dependencies: {', '.join(missing)} …")
-    if recorded_hash != expected_hash or missing:
-        command = [
-            str(python_executable),
-            "-m",
-            "pip",
-            "install",
-            "--disable-pip-version-check",
-            "--no-warn-script-location",
-            "--quiet",
-            "-r",
-            str(REQUIREMENTS_FILE),
-        ]
-        console.print("Resolving Python requirements (this may take a moment)…")
-        result = subprocess.run(command, capture_output=True, text=True)
-        if result.returncode != 0:
-            combined_output = "\n".join(part for part in (result.stdout, result.stderr) if part)
-            if "permission" in combined_output.lower() or "access is denied" in combined_output.lower():
-                console.print(
-                    "[red]Permission error while installing dependencies. Please re-run this launcher as an administrator or with sudo.[/red]"
-                )
-            else:
-                console.print("[red]Dependency installation failed. Output follows:[/red]")
-                console.print(combined_output or "(no output)")
-            sys.exit(result.returncode)
-        _store_marker(marker, expected_hash)
-        missing_after = _missing_modules(REQUIREMENT_IMPORTS)
-        if missing_after:
-            console.print(
-                "[red]Dependencies are still missing after installation. Please check your Python environment and try again.[/red]"
-            )
-            sys.exit(1)
-        console.print("[green]Dependencies installed successfully.[/green]")
-    else:
-        console.print("Dependencies already satisfied.")
-
-
-def _open_browser_when_ready(url: str, delay: float = 1.5) -> None:
+def _wait_and_open_browser(url: str, health_url: str) -> None:
     def _open() -> None:
-        time.sleep(delay)
-        try:
-            webbrowser.open_new(url)
-        except Exception:
-            console.print("Unable to open browser automatically. Please navigate to " + url)
+        console.print("Waiting for ReconScript to pass health check before opening browser…")
+        import requests  # Lazily import so dependency installation can complete first
+
+        deadline = time.time() + 60
+        while time.time() < deadline:
+            try:
+                response = requests.get(health_url, timeout=2)
+                if response.ok:
+                    console.print("ReconScript UI is ready — launching default browser.")
+                    try:
+                        webbrowser.open_new(url)
+                    except Exception:
+                        console.print("Unable to open browser automatically. Please navigate to " + url)
+                    return
+            except requests.RequestException:
+                pass
+            time.sleep(1)
+        console.print(
+            "[yellow]Timed out waiting for health check. Please open the UI manually at "
+            f"{url}[/yellow]"
+        )
 
     thread = threading.Thread(target=_open, daemon=True)
     thread.start()
@@ -212,6 +141,16 @@ def _run_app(host: str, port: int) -> None:
 def main() -> None:
     global console  # must be declared before first use
     os.chdir(ROOT)
+
+    log_root = ROOT / "results"
+    log_root.mkdir(parents=True, exist_ok=True)
+    log_path = log_root / "latest.log"
+    log_handle = log_path.open("w", encoding="utf-8")
+    atexit.register(log_handle.close)
+    sys.stdout = _StreamMultiplexer(sys.__stdout__, log_handle)
+    sys.stderr = _StreamMultiplexer(sys.__stderr__, log_handle)
+
+    console = create_console()
 
     version_warning: str | None = None
     if sys.version_info < (3, 9) or sys.version_info > (3, 13):
@@ -239,10 +178,15 @@ def main() -> None:
         post_launch_messages.append("Virtual environment detected — continuing with current interpreter.")
 
     python_executable = Path(sys.executable)
-    ensure_dependencies(python_executable)
+    try:
+        install_dependencies(python_executable, console=console)
+    except RuntimeError as exc:
+        console.print(f"[red]{exc}[/red]")
+        sys.exit(1)
 
     # ✅ Reinitialize Rich console after dependencies are ensured
-    console = _create_console()
+    console = create_console()
+    post_launch_messages.append(f"Session log: {log_path.resolve()}")
     render_banner()
     if version_warning:
         console.print(version_warning)
@@ -266,11 +210,12 @@ def main() -> None:
 
     console.print(f"Results will be stored in {results_dir.resolve()}")
 
-    url = f"http://127.0.0.1:{DEFAULT_PORT}"
-    if not docker:
-        _open_browser_when_ready(url)
+    public_url = f"http://localhost:{DEFAULT_PORT}"
+    health_url = f"http://127.0.0.1:{DEFAULT_PORT}/health"
+    if docker:
+        console.print("Browser auto-launch disabled inside Docker. Access the UI at http://localhost:5000")
     else:
-        console.print("Browser auto-open disabled inside Docker. Access the UI from your host machine.")
+        _wait_and_open_browser(public_url, health_url)
 
     host = "0.0.0.0" if docker else "127.0.0.1"
     console.print(f"Starting ReconScript web UI on {host}:{DEFAULT_PORT} …")
