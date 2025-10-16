@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import atexit
 import os
+import shutil
 import subprocess
 import sys
 import threading
@@ -14,11 +15,21 @@ import webbrowser
 from pathlib import Path
 from typing import List
 
+try:  # pragma: no cover - optional dependency fallback
+    from dotenv import load_dotenv
+except ModuleNotFoundError:  # pragma: no cover - minimal shim when python-dotenv missing
+    def load_dotenv() -> None:  # type: ignore[return-value]
+        """Fallback no-op when python-dotenv is unavailable."""
+
+        return None
+
 from install_dependencies import create_console, install_dependencies
 
 
+load_dotenv()
+
 ROOT = Path(__file__).resolve().parent
-DEFAULT_PORT = 5000
+DEFAULT_PORT = int(os.environ.get("DEFAULT_PORT", "5000"))
 
 
 class _StreamMultiplexer:
@@ -40,16 +51,16 @@ class _StreamMultiplexer:
 console = create_console()
 
 
-def render_banner() -> None:
-    banner = "\n".join(
-        [
-            "┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓",
-            "┃ ReconScript v0.4.2           ┃",
-            "┃ Author: David █████          ┃",
-            "┃ \"Automated Reconnaissance\"   ┃",
-            "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛",
-        ]
-    )
+def render_banner(version: str, environment: str) -> None:
+    lines = [
+        f"ReconScript v{version}",
+        f"Mode: {environment.capitalize()}",
+        '"Automated Reconnaissance"',
+    ]
+    banner_lines = ["┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓"]
+    banner_lines.extend(f"┃ {text:<26} ┃" for text in lines)
+    banner_lines.append("┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛")
+    banner = "\n".join(banner_lines)
     try:  # pragma: no cover - enhanced output when Rich is present
         from rich.panel import Panel
 
@@ -67,8 +78,6 @@ def in_docker() -> bool:
         return True
     if os.environ.get("RUNNING_IN_DOCKER") == "1":
         return True
-    if os.environ.get("WSL_INTEROP"):
-        return True
     if Path("/var/run/docker.sock").exists():
         return True
     try:
@@ -78,6 +87,18 @@ def in_docker() -> bool:
     except OSError:
         pass
     return False
+
+
+def in_wsl() -> bool:
+    return bool(os.environ.get("WSL_INTEROP") or os.environ.get("WSL_DISTRO_NAME"))
+
+
+def describe_environment() -> str:
+    if in_docker():
+        return "docker"
+    if in_wsl():
+        return "wsl"
+    return "local"
 
 
 def venv_python_path(venv_dir: Path) -> Path:
@@ -99,7 +120,7 @@ def ensure_virtualenv() -> Path:
 
 
 
-def _wait_and_open_browser(url: str, health_url: str) -> None:
+def _wait_and_open_browser(url: str, health_url: str, environment: str) -> None:
     def _open() -> None:
         console.print("Waiting for ReconScript to pass health check before opening browser…")
         import requests  # Lazily import so dependency installation can complete first
@@ -109,9 +130,15 @@ def _wait_and_open_browser(url: str, health_url: str) -> None:
             try:
                 response = requests.get(health_url, timeout=2)
                 if response.ok:
+                    if environment == "docker":
+                        console.print("ReconScript UI is ready inside Docker — open your browser at " + url)
+                        return
                     console.print("ReconScript UI is ready — launching default browser.")
                     try:
-                        webbrowser.open_new(url)
+                        if environment == "wsl" and shutil.which("wslview"):
+                            subprocess.Popen(["wslview", url])  # noqa: S603,S607 - best effort helper
+                        else:
+                            webbrowser.open_new(url)
                     except Exception:
                         console.print("Unable to open browser automatically. Please navigate to " + url)
                     return
@@ -142,7 +169,11 @@ def main() -> None:
     global console  # must be declared before first use
     os.chdir(ROOT)
 
-    log_root = ROOT / "results"
+    configured_results = Path(os.environ.get("RESULTS_DIR", "results")).expanduser()
+    if not configured_results.is_absolute():
+        configured_results = (ROOT / configured_results).resolve()
+
+    log_root = configured_results
     log_root.mkdir(parents=True, exist_ok=True)
     log_path = log_root / "latest.log"
     log_handle = log_path.open("w", encoding="utf-8")
@@ -159,11 +190,11 @@ def main() -> None:
             f" Python {'.'.join(map(str, sys.version_info[:3]))}. Proceeding anyway…[/yellow]"
         )
 
-    docker = in_docker()
+    environment = describe_environment()
     venv_active = in_virtualenv()
     post_launch_messages: List[str] = []
 
-    if not docker and not venv_active:
+    if environment != "docker" and not venv_active:
         python_path = ensure_virtualenv()
         if Path(sys.executable).resolve() != python_path.resolve() and os.environ.get("RECONSCRIPT_BOOTSTRAPPED") != "1":
             console.print("Switching to the project virtual environment …")
@@ -172,7 +203,7 @@ def main() -> None:
             command = [str(python_path), str(ROOT / "start.py"), *sys.argv[1:]]
             raise SystemExit(subprocess.call(command, env=env))
         post_launch_messages.append(f"Using virtual environment at {python_path.parent}")
-    elif docker:
+    elif environment == "docker":
         post_launch_messages.append("Running inside a Docker container — using system interpreter.")
     else:
         post_launch_messages.append("Virtual environment detected — continuing with current interpreter.")
@@ -187,7 +218,13 @@ def main() -> None:
     # ✅ Reinitialize Rich console after dependencies are ensured
     console = create_console()
     post_launch_messages.append(f"Session log: {log_path.resolve()}")
-    render_banner()
+
+    try:
+        from reconscript import __version__ as package_version
+    except ModuleNotFoundError:
+        package_version = "unknown"
+
+    render_banner(package_version, environment)
     if version_warning:
         console.print(version_warning)
     for message in post_launch_messages:
@@ -210,14 +247,17 @@ def main() -> None:
 
     console.print(f"Results will be stored in {results_dir.resolve()}")
 
-    public_url = f"http://localhost:{DEFAULT_PORT}"
-    health_url = f"http://127.0.0.1:{DEFAULT_PORT}/health"
-    if docker:
-        console.print("Browser auto-launch disabled inside Docker. Access the UI at http://localhost:5000")
-    else:
-        _wait_and_open_browser(public_url, health_url)
+    if environment == "wsl":
+        console.print("Detected Windows Subsystem for Linux environment.")
 
-    host = "0.0.0.0" if docker else "127.0.0.1"
+    public_url = f"http://127.0.0.1:{DEFAULT_PORT}"
+    health_url = f"http://127.0.0.1:{DEFAULT_PORT}/health"
+    if environment == "docker":
+        console.print("Browser auto-launch disabled inside Docker. Access the UI at " + public_url)
+    else:
+        _wait_and_open_browser(public_url, health_url, environment)
+
+    host = "0.0.0.0" if environment in {"docker", "wsl"} else "127.0.0.1"
     console.print(f"Starting ReconScript web UI on {host}:{DEFAULT_PORT} …")
     try:
         _run_app(host, DEFAULT_PORT)

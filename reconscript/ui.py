@@ -15,6 +15,11 @@ from pathlib import Path
 from queue import Queue
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
+try:  # pragma: no cover - optional dependency fallback
+    from dotenv import load_dotenv
+except ModuleNotFoundError:  # pragma: no cover - minimal shim when python-dotenv missing
+    def load_dotenv() -> None:  # type: ignore[return-value]
+        return None
 from flask import (
     Flask,
     Response,
@@ -31,9 +36,12 @@ from requests import exceptions as requests_exceptions
 
 from . import __version__
 from .core import run_recon
+from .logging_utils import configure_rich_logging
 from .report import default_output_path, ensure_results_dir
 from .reporters import write_report
 
+
+load_dotenv()
 
 LOGGER = logging.getLogger(__name__)
 
@@ -48,8 +56,6 @@ def _in_docker() -> bool:
         return True
     if os.environ.get("RUNNING_IN_DOCKER") == "1":
         return True
-    if os.environ.get("WSL_INTEROP"):
-        return True
     if Path("/var/run/docker.sock").exists():
         return True
     try:
@@ -59,6 +65,18 @@ def _in_docker() -> bool:
     except OSError:
         pass
     return False
+
+
+def _in_wsl() -> bool:
+    return bool(os.environ.get("WSL_INTEROP") or os.environ.get("WSL_DISTRO_NAME"))
+
+
+def _environment_label() -> str:
+    if _in_docker():
+        return "Docker"
+    if _in_wsl():
+        return "WSL"
+    return "Local"
 
 
 @dataclass
@@ -91,6 +109,10 @@ class JobState:
 def create_app() -> Flask:
     """Factory that configures and returns the Flask application instance."""
 
+    configure_rich_logging()
+
+    default_port = int(os.environ.get("DEFAULT_PORT", "5000"))
+
     app = Flask(
         __name__,
         template_folder=str(TEMPLATE_FOLDER),
@@ -98,7 +120,7 @@ def create_app() -> Flask:
     )
     app.config.update(
         TEMPLATES_AUTO_RELOAD=True,
-        SERVER_NAME=os.environ.get("SERVER_NAME", "127.0.0.1:5000"),
+        SERVER_NAME=os.environ.get("SERVER_NAME", f"127.0.0.1:{default_port}"),
         APPLICATION_ROOT="/",
         PREFERRED_URL_SCHEME="http",
     )
@@ -111,7 +133,7 @@ def create_app() -> Flask:
         return {
             "version": __version__,
             "python_version": sys.version.split()[0],
-            "environment": "Docker" if _in_docker() else "Local",
+            "environment": _environment_label(),
             "changelog_summary": changelog_summary,
             "changelog_filename": changelog_path.name if changelog_path.exists() else None,
         }
@@ -236,34 +258,42 @@ def create_app() -> Flask:
             default_ports=DEFAULT_PORTS_DISPLAY,
         )
 
-    @app.post("/scan")
+    @app.post("/api/scan")
     def start_scan() -> Response:
-        payload = request.get_json(force=True, silent=True) or {}
-        target = (payload.get("target") or "").strip()
-        ports_raw = payload.get("ports") or DEFAULT_PORTS_DISPLAY
-        hostname = payload.get("hostname") or None
-        report_format = (payload.get("format") or "html").lower()
-
-        if report_format not in {"html", "json", "markdown", "pdf"}:
-            return jsonify({"error": "Unsupported report format."}), 400
-
-        if not target:
-            return jsonify({"error": "Target IP or hostname is required."}), 400
-
         try:
-            ports = _parse_ports(ports_raw)
+            payload = request.get_json(force=True, silent=True) or {}
+            if not isinstance(payload, dict):
+                raise ValueError("Request payload must be a JSON object.")
+
+            target = (payload.get("target") or "").strip()
+            ports_raw = payload.get("ports") or DEFAULT_PORTS_DISPLAY
+            hostname = payload.get("hostname") or None
+            report_format = (payload.get("format") or "html").lower()
+
+            if report_format not in {"html", "json", "markdown", "pdf"}:
+                raise ValueError("Unsupported report format.")
+
+            if not target:
+                raise ValueError("Target IP or hostname is required.")
+
+            ports = _parse_ports(str(ports_raw))
+
+            job = JobState(id=uuid.uuid4().hex[:8], target=target, ports=ports, format=report_format)
+
+            with jobs_lock:
+                jobs[job.id] = job
+
+            thread = threading.Thread(target=_run_job, args=(job, hostname, report_format), daemon=True)
+            thread.start()
+
+            return jsonify({"status": "ok", "job_id": job.id})
         except ValueError as exc:
-            return jsonify({"error": str(exc)}), 400
-
-        job = JobState(id=uuid.uuid4().hex[:8], target=target, ports=ports, format=report_format)
-
-        with jobs_lock:
-            jobs[job.id] = job
-
-        thread = threading.Thread(target=_run_job, args=(job, hostname, report_format), daemon=True)
-        thread.start()
-
-        return jsonify({"job_id": job.id})
+            LOGGER.info("Rejected scan request: %s", exc)
+            return jsonify({"status": "error", "message": str(exc)}), 400
+        except Exception as exc:  # pragma: no cover - defensive guard
+            LOGGER.exception("Failed to start scan")
+            message = str(exc) or "Internal server error"
+            return jsonify({"status": "error", "message": message}), 500
 
     @app.get("/stream/<job_id>")
     def stream(job_id: str) -> Response:
@@ -283,18 +313,18 @@ def create_app() -> Flask:
         headers = {"Cache-Control": "no-cache", "Content-Type": "text/event-stream"}
         return Response(generate(), headers=headers)
 
-    @app.get("/reports")
-    def list_reports() -> str:
+    @app.get("/results")
+    def results_index() -> str:
         records = _discover_reports(results_dir)
-        return render_template("reports.html", reports=records)
+        return render_template("results.html", reports=records)
 
-    @app.post("/reports/<path:filename>/delete")
+    @app.post("/results/<path:filename>/delete")
     def delete_report(filename: str):
         target_path = (results_dir / filename).resolve()
         if not str(target_path).startswith(str(results_dir.resolve())) or not target_path.exists():
             abort(404)
         target_path.unlink()
-        return redirect(url_for("list_reports"))
+        return redirect(url_for("results_index"))
 
     @app.get("/results/<path:filename>")
     def serve_report(filename: str):
@@ -302,7 +332,7 @@ def create_app() -> Flask:
 
     @app.get("/health")
     def healthcheck() -> Response:
-        return jsonify({"status": "ok", "jobs": len(jobs)})
+        return jsonify({"status": "ok"})
 
     return app
 
@@ -514,7 +544,7 @@ def _discover_reports(results_dir: Path) -> List[Dict[str, object]]:
     if not results_dir.exists():
         return items
     for path in sorted(results_dir.glob("*"), key=lambda p: p.stat().st_mtime, reverse=True):
-        if path.is_file():
+        if path.is_file() and path.suffix.lower() in {".html", ".htm"}:
             stat = path.stat()
             items.append(
                 {

@@ -2,10 +2,14 @@
 setlocal
 cd /d %~dp0
 
-echo Launching ReconScript...
 if not exist results mkdir results
+set "LOGFILE=results\latest.log"
+set "PYTHON_BIN=%PYTHON%"
+if "%PYTHON_BIN%"=="" set "PYTHON_BIN=python"
 
-docker build -t reconscript .
-docker run --rm -p 5000:5000 -v "%cd%\results:/app/results" reconscript | tee results\latest.log
+echo Launching ReconScript via start.py...
+echo Logs mirror to %LOGFILE%
+
+"%PYTHON_BIN%" start.py %*
 
 pause

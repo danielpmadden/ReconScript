@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.5.0 - 2024-11-20
+- Introduced `/api/scan`, `/results`, `/results/<file>`, and `/health` endpoints with
+  consistent JSON responses and Rich-formatted logging.
+- Added report library UI with newest-first ordering and secure static serving of
+  generated HTML artefacts.
+- Simplified launch experience across start.py/start.sh/start.bat with `.env`
+  support, automatic browser opening, and environment detection for Docker/WSL/local
+  hosts.
+- Adopted python-dotenv and Rich logging helpers across CLI, UI, and server entry
+  points for uniform console output.
+- Refreshed README/HELP documentation, added report screenshot placeholders, and
+  reiterated authorised-use guidance.
+
 ## v0.4.2 - 2024-08-05
 - Added a portable `start.py` launcher with automatic virtual environment
   management, dependency installation, and browser auto-open behaviour.

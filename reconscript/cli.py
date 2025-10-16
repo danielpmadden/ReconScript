@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-# Modified by codex: 2024-05-08
+"""Command-line interface for ReconScript scanning operations."""
 
 import argparse
-import logging
 import re
 import sys
 import webbrowser
@@ -57,6 +56,7 @@ except ImportError:  # pragma: no cover - fallback when Rich is unavailable
 
 from . import __version__
 from .core import run_recon
+from .logging_utils import configure_rich_logging
 from .report import default_output_path, ensure_results_dir
 from .reporters import render_json, write_report
 from .scanner import (
@@ -215,6 +215,8 @@ def build_parser() -> argparse.ArgumentParser:
 def configure_logging(args: argparse.Namespace) -> None:
     """Configure logging according to CLI verbosity flags."""
 
+    import logging
+
     if args.verbose:
         level = logging.DEBUG
     elif args.quiet:
@@ -222,10 +224,7 @@ def configure_logging(args: argparse.Namespace) -> None:
     else:
         level = logging.INFO
 
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s %(name)s [%(levelname)s] %(message)s",
-    )
+    configure_rich_logging(level)
 
 
 def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:

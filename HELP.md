@@ -1,134 +1,40 @@
-<!-- # Modified by codex: 2024-05-08 -->
+# ReconScript CLI quick reference
 
-# ReconScript — User Guide & Command Reference
+ReconScript ships with a fully featured command-line interface for scripted assessments. All flags are read-only and safe for approved targets.
 
-## Overview
-ReconScript is a safe, read-only web reconnaissance utility for authorized security assessments.
-It performs lightweight TCP + HTTP(S) metadata scans and outputs JSON, Markdown, HTML, or PDF reports.
-
-## Installation
-```
-pip install .
-# optional extras
-pip install .[dev]     # includes Flask for the web UI
-pip install .[pdf]     # installs WeasyPrint for PDF export
-# or build the container image
-docker build -t reconscript .
-```
-
-## Basic Usage
-```
-reconscript --target 203.0.113.5
-```
-
-## Command Reference
-| Flag | Purpose |
-|------|----------|
-| --target <hostname> | Target host/IP |
-| --ports <list> | Space-separated ports (80 443 3000) |
-| --outfile <path> | Output file |
-| --format {json,markdown,html,pdf} | Output format (defaults to HTML) |
-| --dry-run | Plan only, no network contact |
-| --timeout <sec> | HTTP(S) request timeout |
-| --throttle <sec> | Delay between probes |
-| --ipv6 | Enable IPv6 |
-| --no-color | Plain terminal output |
-| --no-browser | Disable auto-open of HTML reports |
-| --verbose | Verbose logs |
-| --version | Show version |
-| --help | Short help summary |
-
-## Example Workflows
-### Safe local test
-```
-docker run --rm -p 3000:3000 bkimminich/juice-shop
-docker run --rm --network host -v $(pwd)/results:/app/results \
-  reconscript --target 127.0.0.1 --ports 3000 \
-  --outfile results/juice-report.html --format html
-```
-
-### Dry-run
-```
-reconscript --target example.com --dry-run --verbose
-```
-
-### Local Web UI
-```
-pip install .[dev]
-python web_ui.py
-```
-Visit http://127.0.0.1:5000/ and submit a localhost or RFC1918 address. The UI
-queues scans in a background thread and links directly to the generated HTML and
-JSON reports. The service intentionally binds only to `127.0.0.1`.
-
-## Ethical & Safety Notes
-Authorized targets only. No intrusive actions. Throttled by default.
-
-## Troubleshooting
-- Missing ports → increase timeout.
-- Permission error → check the `results/` folder permissions.
-- PDF fallback → install extras via `pip install .[pdf]` or rebuild the Docker image
-  with `--build-arg INCLUDE_PDF=true`.
-
-## Credits
-Author Daniel Madden  Version 0.4.0  License MIT
-
-## Post-Merge Runbook
-
-## Quick Start
-**Windows:**
-```powershell
-py -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install --no-deps .[dev]
-py -m reconscript --target 127.0.0.1 --ports 3000
-```
-
-**macOS/Linux:**
+## Basic usage
 ```bash
-python3 -m venv .venv && source .venv/bin/activate
-pip install --no-deps .[dev]
-python3 -m reconscript --target 127.0.0.1 --ports 3000
+reconscript --target 203.0.113.5 --ports 80 443 8080
 ```
 
-The report auto-opens in your browser (`results/scan-YYYYMMDD-HHMMSS.html`).
+## Core flags
+| Flag | Description |
+| ---- | ----------- |
+| `--target <IP>` | **Required.** Approved IPv4/IPv6 address to assess. |
+| `--hostname <name>` | Override HTTP Host header / TLS SNI. |
+| `--ports <list>` | Space-separated ports or ranges (e.g. `80 443 8000-8010`). |
+| `--outfile <path>` | Save report to a custom path (format inferred by extension). |
+| `--format {html,json,markdown,pdf}` | Force report format. `--pdf` acts as a shortcut. |
+| `--socket-timeout <sec>` | TCP timeout (default inherited from scanner). |
+| `--http-timeout <sec>` | HTTP(S) timeout for metadata collection. |
+| `--max-retries <n>` | HTTP retry attempts for transient issues. |
+| `--backoff <sec>` | Retry backoff factor. |
+| `--throttle <sec>` | Delay between TCP probes. |
+| `--enable-ipv6` | Enable IPv6 resolution and scanning. |
+| `--dry-run` | Produce a skeleton report without network activity. |
+| `--no-browser` | Skip automatic opening of HTML reports. |
+| `--no-color` | Disable Rich-coloured console summaries. |
+| `--verbose` / `--quiet` | Adjust logging verbosity. |
 
----
+## Output formats
+- **HTML** (default): interactive report with links to served assets via `/results/<file>.html`.
+- **Markdown**: portable text for internal wikis.
+- **JSON**: machine-readable summary for automation.
+- **PDF**: printable deliverable (requires WeasyPrint dependencies).
 
-## Web UI
-```bash
-python web_ui.py
-```
-Then visit:  
-➡ http://127.0.0.1:5000/
+## Tips
+- Combine `--outfile results/acme.html --format html` to align with your retention policy.
+- Use `--dry-run` during change management reviews to demonstrate planned actions without touching the network.
+- The CLI respects `.env` overrides for `RESULTS_DIR`, so reports land beside UI-generated files.
 
-Enter:
-- Target (default: 127.0.0.1)
-- Ports (space-separated)
-- Format (HTML/JSON/MD)
-
-Click **Run Scan** → the HTML report opens when complete.
-
----
-
-## Docker Demo
-```bash
-docker-compose up
-```
-Starts OWASP Juice Shop (port 3000) + ReconScript UI on port 5000.  
-Reports stored under `./results/`.
-
-To include PDF:
-```bash
-docker build --build-arg INCLUDE_PDF=true -t reconscript:pdf .
-```
-
----
-
-## Testing
-```bash
-pytest -q
-```
-✅ All tests pass or skip gracefully (PDF skipped if GTK missing).
-
----
+See the [README](README.md) for workflow overviews and the [tests](tests/) directory for concrete usage examples.

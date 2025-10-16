@@ -1,0 +1,45 @@
+{% extends "layout.html" %}
+
+{% block title %}Reports — ReconScript Dashboard{% endblock %}
+
+{% block content %}
+<section class="space-y-8">
+  <div class="surface rounded-2xl border border-slate-800 bg-slate-900/60 p-8 shadow-xl shadow-slate-900/40">
+    <h1 class="text-3xl font-semibold text-sky-200 mb-6 flex items-center gap-3">
+      <span>📂</span>
+      Saved Reports
+    </h1>
+    {% if reports %}
+    <p class="text-sm text-slate-400 mb-4">Newest reports appear first. Click a name to open it in a new tab.</p>
+    <div class="overflow-hidden rounded-xl border border-slate-800">
+      <table class="min-w-full divide-y divide-slate-800 text-sm">
+        <thead class="bg-slate-900/80 text-slate-300">
+          <tr>
+            <th scope="col" class="px-4 py-3 text-left font-semibold">Report</th>
+            <th scope="col" class="px-4 py-3 text-left font-semibold">Generated</th>
+            <th scope="col" class="px-4 py-3 text-left font-semibold">Size</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-800 bg-slate-950/60 text-slate-200">
+          {% for report in reports %}
+          <tr class="hover:bg-slate-900/40">
+            <td class="px-4 py-3">
+              <a href="{{ report.url }}" class="text-sky-300 hover:text-sky-200" target="_blank" rel="noopener">
+                {{ report.name }}
+              </a>
+            </td>
+            <td class="px-4 py-3 whitespace-nowrap">{{ report.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+            <td class="px-4 py-3 whitespace-nowrap">{{ (report.size / 1024)|round(1) }} KB</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="rounded-xl border border-dashed border-slate-700 bg-slate-900/50 p-6 text-center text-slate-400">
+      No HTML reports found yet. Run your first scan from the <a href="{{ url_for('dashboard') }}" class="text-sky-300 hover:text-sky-200">dashboard</a>.
+    </p>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}
