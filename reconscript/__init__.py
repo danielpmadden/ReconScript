@@ -5,4 +5,4 @@ from __future__ import annotations
 __all__ = ["__version__"]
 
 # Semantic version for package consumers.
-__version__ = "0.4.1"
+__version__ = "0.4.2"

@@ -9,6 +9,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const reportActions = document.getElementById('report-actions');
   const reportLink = document.getElementById('open-report');
   const reportFormat = document.getElementById('report-format');
+  const summaryCard = document.getElementById('summary-card');
+  const summaryList = document.getElementById('summary-list');
+  const summaryNote = document.getElementById('summary-note');
+  const summaryDuration = document.getElementById('summary-duration');
   const quickTest = document.getElementById('quick-test');
   const themeToggle = document.getElementById('theme-toggle');
   const aboutPanel = document.getElementById('about');
@@ -66,6 +70,19 @@ document.addEventListener('DOMContentLoaded', () => {
     progressLog.innerHTML = '';
     reportActions.classList.add('hidden');
     status.textContent = '';
+    if (summaryCard) {
+      summaryCard.classList.add('hidden');
+    }
+    if (summaryList) {
+      summaryList.innerHTML = '';
+    }
+    if (summaryDuration) {
+      summaryDuration.textContent = '';
+    }
+    if (summaryNote) {
+      summaryNote.textContent = '';
+      summaryNote.classList.add('hidden');
+    }
   };
 
   const startStream = (jobId) => {
@@ -87,6 +104,35 @@ document.addEventListener('DOMContentLoaded', () => {
         reportLink.href = payload.report_url;
         reportFormat.textContent = payload.format.toUpperCase();
         status.textContent = 'Report ready! Opening in a new tab…';
+        if (summaryCard && summaryList) {
+          summaryList.innerHTML = '';
+          if (Array.isArray(payload.summary)) {
+            payload.summary.forEach((item) => {
+              if (!item || !item.label) return;
+              const dt = document.createElement('dt');
+              dt.textContent = item.label;
+              dt.className = 'font-semibold text-slate-300';
+              const dd = document.createElement('dd');
+              dd.textContent = item.value;
+              dd.className = 'text-slate-200';
+              summaryList.append(dt, dd);
+            });
+          }
+          if (summaryDuration) {
+            summaryDuration.textContent = payload.duration ? `Duration ${payload.duration}` : '';
+          }
+          if (summaryNote) {
+            const openPorts = Array.isArray(payload.open_ports) ? payload.open_ports.length : 0;
+            if (openPorts === 0) {
+              summaryNote.textContent = 'No open ports detected — review findings for additional context.';
+              summaryNote.classList.remove('hidden');
+            } else {
+              summaryNote.textContent = '';
+              summaryNote.classList.add('hidden');
+            }
+          }
+          summaryCard.classList.remove('hidden');
+        }
         try {
           window.open(payload.report_url, '_blank');
         } catch (error) {
@@ -97,6 +143,9 @@ document.addEventListener('DOMContentLoaded', () => {
       if (payload.type === 'error') {
         progressMessage.textContent = `❌ ${payload.message}`;
         status.textContent = 'Scan failed. Check the log for details.';
+        if (summaryCard) {
+          summaryCard.classList.add('hidden');
+        }
         source.close();
       }
     };
@@ -145,7 +194,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const payload = {
         target: '127.0.0.1',
         hostname: 'localhost',
-        ports: '3000 443',
+        ports: '3000,443',
         format: 'html',
       };
       submitScan(payload);
