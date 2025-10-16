@@ -4,7 +4,6 @@
   <img src="https://img.shields.io/badge/UI-HTML_+_JS-orange?logo=html5&logoColor=white" alt="HTML/JS">
   <img src="https://img.shields.io/badge/Build-Docker_+_Compose-2496ED?logo=docker&logoColor=white" alt="Docker">
   <img src="https://img.shields.io/badge/License-MIT-yellow?logo=open-source-initiative&logoColor=white" alt="License">
-  <img src="https://img.shields.io/github/v/release/YOUR_GITHUB_USERNAME/ReconScript?label=Version&color=blueviolet" alt="Version">
   <img src="https://img.shields.io/badge/Status-Active-success?logo=git&logoColor=white" alt="Status">
 </p>
 
