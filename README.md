@@ -2,9 +2,7 @@
   <img src="https://img.shields.io/badge/Language-Python_3.9–3.13-blue?logo=python&logoColor=white" alt="Python 3.9–3.13">
   <img src="https://img.shields.io/badge/Framework-Flask-green?logo=flask&logoColor=white" alt="Flask">
   <img src="https://img.shields.io/badge/UI-Web_UI-orange?logo=html5&logoColor=white" alt="Web UI">
-  <img src="https://img.shields.io/badge/License-MIT-yellow?logo=open-source-initiative&logoColor=white" alt="MIT License">
-  <img src="https://img.shields.io/github/v/release/YOUR_GITHUB_USERNAME/ReconScript?label=Version" alt="Latest Version">
-  <img src="https://img.shields.io/github/last-commit/YOUR_GITHUB_USERNAME/ReconScript?label=Last%20Commit" alt="Last Commit">
+  <img src="https://img.shields.io/badge/License-MIT-yellow?logo=open-source-initiative&logoColor=white" alt="MIT 
 </p>
 
 # ReconScript
