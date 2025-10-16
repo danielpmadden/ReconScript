@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{% block title %}ReconScript Dashboard{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+    <script defer src="{{ url_for('static', filename='scripts.js') }}"></script>
+  </head>
+  <body data-theme="dark" class="h-full bg-slate-950 text-slate-100 transition-colors duration-500">
+    <div class="min-h-full flex flex-col">
+      <header class="surface border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-50">
+        <div class="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
+          <div class="flex items-center space-x-6">
+            <a href="{{ url_for('dashboard') }}" class="text-2xl font-semibold text-sky-300 hover:text-sky-200">ReconScript</a>
+            <nav class="hidden gap-4 text-sm font-medium text-slate-300 sm:flex">
+              <a href="{{ url_for('dashboard') }}" class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}">Run Scan</a>
+              <a href="{{ url_for('list_reports') }}" class="nav-link {% if request.endpoint == 'list_reports' %}active{% endif %}">View Reports</a>
+              <a href="#about" class="nav-link about-trigger">About</a>
+            </nav>
+          </div>
+          <button id="theme-toggle" class="inline-flex items-center space-x-2 rounded-full border border-slate-700 px-3 py-1 text-xs font-semibold text-slate-200 hover:border-sky-400 hover:text-sky-200">
+            <span aria-hidden="true">🌙</span>
+            <span class="hidden sm:inline">Toggle mode</span>
+          </button>
+        </div>
+      </header>
+
+      <main class="flex-1 bg-slate-950/70">
+        <div class="mx-auto w-full max-w-6xl px-4 py-10">
+          {% block content %}{% endblock %}
+        </div>
+      </main>
+
+      <footer class="surface border-t border-slate-800 bg-slate-900/80 px-4 py-6 text-center text-xs text-slate-500">
+        ReconScript v{{ version }} — Safe Reconnaissance Helper
+      </footer>
+    </div>
+
+    <div id="about" class="about-panel" hidden>
+      <div class="about-content">
+        <button type="button" class="close-about" aria-label="Close about section">×</button>
+        <h2 class="text-2xl font-semibold text-sky-200 mb-4 flex items-center gap-2">
+          <span>ℹ️</span>
+          About ReconScript
+        </h2>
+        <p class="mb-3 text-slate-300">
+          ReconScript is a safe reconnaissance helper — it helps check the basic security posture of web servers or apps you’re authorized to test.<br />
+          It never exploits or attacks anything; it only observes and reports what’s visible from the outside.
+        </p>
+        <div class="space-y-2 rounded-lg border border-slate-700 bg-slate-900/60 p-4 shadow-lg">
+          <p class="flex items-start gap-2 text-slate-200"><span>✅</span><span>You specify a target IP and optional ports.</span></p>
+          <p class="flex items-start gap-2 text-slate-200"><span>✅</span><span>It checks which ports are open.</span></p>
+          <p class="flex items-start gap-2 text-slate-200"><span>✅</span><span>If it finds web services, it gathers safe HTTP data.</span></p>
+          <p class="flex items-start gap-2 text-slate-200"><span>✅</span><span>It checks for missing security headers (CSP, HSTS, etc.).</span></p>
+          <p class="flex items-start gap-2 text-slate-200"><span>✅</span><span>It safely checks for robots.txt.</span></p>
+          <p class="flex items-start gap-2 text-slate-200"><span>✅</span><span>It generates reports in HTML (default), Markdown, JSON, or PDF.</span></p>
+          <p class="flex items-start gap-2 text-slate-200"><span>✅</span><span>It runs locally or in Docker with demo apps like OWASP Juice Shop.</span></p>
+          <p class="flex items-start gap-2 text-slate-200"><span>✅</span><span>It’s read-only, ethical, and logs all actions for review.</span></p>
+        </div>
+        <p class="mt-4 text-slate-400">
+          🧠 <strong>ReconScript is designed for responsible, authorized testing only — never for intrusion or exploitation.</strong>
+        </p>
+        <p class="mt-6 text-xs uppercase tracking-wide text-slate-600">🔒 Privacy-first • ℹ️ Transparent • ✅ Safe by default</p>
+      </div>
+    </div>
+  </body>
+</html>

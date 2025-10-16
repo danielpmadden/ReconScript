@@ -1,0 +1,66 @@
+{% extends "layout.html" %}
+
+{% block title %}Run Scan — ReconScript Dashboard{% endblock %}
+
+{% block content %}
+<section class="space-y-8">
+  <div class="surface rounded-2xl border border-slate-800 bg-slate-900/60 p-8 shadow-xl shadow-slate-900/40">
+    <h1 class="text-3xl font-semibold text-sky-200 mb-6 flex items-center gap-3">
+      <span>🛰️</span>
+      Run a ReconScript Scan
+    </h1>
+    <form id="scan-form" class="grid grid-cols-1 gap-6 md:grid-cols-2" autocomplete="off">
+      <div class="md:col-span-2">
+        <label for="target" class="text-sm font-medium text-slate-300">Target IP / Hostname</label>
+        <input id="target" name="target" type="text" required placeholder="e.g. 127.0.0.1 or demo.local" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950/60 px-4 py-3 text-base text-slate-100 placeholder:text-slate-500 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-500/40" />
+      </div>
+      <div>
+        <label for="ports" class="text-sm font-medium text-slate-300">Ports</label>
+        <input id="ports" name="ports" type="text" value="{{ default_ports }}" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950/60 px-4 py-3 text-base text-slate-100 placeholder:text-slate-500 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-500/40" />
+        <p class="mt-2 text-xs text-slate-500">Space-separated list. Defaults shown above.</p>
+      </div>
+      <div>
+        <label for="format" class="text-sm font-medium text-slate-300">Output format</label>
+        <select id="format" name="format" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950/60 px-4 py-3 text-base text-slate-100 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-500/40">
+          <option value="html" selected>HTML (default)</option>
+          <option value="json">JSON</option>
+          <option value="markdown">Markdown</option>
+          <option value="pdf">PDF</option>
+        </select>
+      </div>
+      <div class="md:col-span-2 flex flex-wrap items-center gap-4">
+        <button type="submit" class="inline-flex items-center gap-2 rounded-full bg-sky-500 px-6 py-3 text-base font-semibold text-white shadow-lg shadow-sky-500/30 transition hover:bg-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-300">
+          <span>⚡</span>
+          Run Scan
+        </button>
+        <button type="button" id="quick-test" class="inline-flex items-center gap-2 rounded-full border border-slate-700 px-5 py-3 text-sm font-semibold text-slate-200 transition hover:border-sky-400 hover:text-sky-200">
+          <span>🧪</span>
+          Quick Test (localhost:3000)
+        </button>
+        <span id="scan-status" class="text-sm text-slate-400"></span>
+      </div>
+    </form>
+  </div>
+
+  <div class="surface rounded-2xl border border-slate-800 bg-slate-900/50 p-8 shadow-lg">
+    <h2 class="text-xl font-semibold text-slate-200 flex items-center gap-3">
+      <span>📈</span>
+      Live Scan Progress
+    </h2>
+    <div class="mt-4 space-y-4">
+      <div class="progress-container">
+        <div id="progress-bar" class="progress-bar"></div>
+      </div>
+      <div id="progress-message" class="text-sm text-slate-300">Waiting for scan…</div>
+      <div id="progress-log" class="scrollbar-thin h-40 overflow-y-auto rounded-lg border border-slate-800 bg-slate-950/60 p-4 text-xs font-mono text-slate-300"></div>
+      <div id="report-actions" class="hidden items-center gap-4">
+        <a id="open-report" href="#" target="_blank" rel="noopener" class="inline-flex items-center gap-2 rounded-full bg-emerald-500 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-500/20 transition hover:bg-emerald-400">
+          <span>✅</span>
+          Open Report
+        </a>
+        <span id="report-format" class="rounded-full border border-emerald-400 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-200"></span>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

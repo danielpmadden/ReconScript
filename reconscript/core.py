@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 import time
 from datetime import datetime
-from typing import Dict, Optional
+from typing import Callable, Dict, Optional
 
 from . import __version__
 from .report import embed_runtime_metadata
@@ -35,6 +35,18 @@ LOGGER = logging.getLogger(__name__)
 REPORT_LOGGER = logging.getLogger("reconscript.report")
 
 
+ProgressCallback = Callable[[str, float], None]
+
+
+def _notify(callback: Optional[ProgressCallback], message: str, progress: float) -> None:
+    """Invoke ``callback`` with normalized progress if provided."""
+
+    if callback is None:
+        return
+    bounded = max(0.0, min(1.0, progress))
+    callback(message, bounded)
+
+
 def run_recon(
     target: str,
     hostname: Optional[str],
@@ -46,6 +58,7 @@ def run_recon(
     throttle: float = 0.0,
     enable_ipv6: bool = False,
     dry_run: bool = False,
+    progress_callback: Optional[ProgressCallback] = None,
 ) -> Dict[str, object]:
     """Execute the ReconScript workflow and optionally persist the report."""
 
@@ -53,6 +66,8 @@ def run_recon(
     normalized_target = normalize_target(target)
     # Normalise and deduplicate the requested ports for predictable scanning.
     validated_ports = validate_port_list(ports)
+
+    _notify(progress_callback, "Preparing scan configuration…", 0.05)
 
     config = ScanConfig(
         target=normalized_target,
@@ -79,6 +94,7 @@ def run_recon(
 
     if dry_run:
         LOGGER.info("Dry-run enabled; skipping network activity")
+        _notify(progress_callback, "Dry-run enabled; skipping network activity.", 1.0)
         report.update(
             {
                 "open_ports": [],
@@ -101,12 +117,14 @@ def run_recon(
         )
 
         LOGGER.info("Starting TCP connect scan of %s on %s", normalized_target, list(validated_ports))
+        _notify(progress_callback, "Starting TCP connect scan…", 0.2)
         open_ports = tcp_connect_scan(config, validated_ports, throttle)
         report["open_ports"] = open_ports
 
         http_results: Dict[int, Dict[str, object]] = {}
         if open_ports:
             LOGGER.info("Evaluating HTTP services on detected ports")
+            _notify(progress_callback, "Evaluating HTTP services…", 0.4)
         for port in open_ports:
             if port in HTTP_PORTS:
                 LOGGER.debug("Fetching HTTP metadata from port %s", port)
@@ -116,17 +134,22 @@ def run_recon(
         if any(port in (443, 8443) for port in open_ports):
             tls_port = 443 if 443 in open_ports else 8443
             LOGGER.info("Gathering TLS certificate details from port %s", tls_port)
+            _notify(progress_callback, "Gathering TLS certificate details…", 0.6)
             report["tls_cert"] = fetch_tls_certificate(config, tls_port)
 
         LOGGER.info("Requesting robots.txt for situational awareness")
+        _notify(progress_callback, "Requesting robots.txt…", 0.75)
         report["robots"] = fetch_robots(session, hostname or normalized_target)
 
         report["findings"] = generate_findings(http_results)
+        _notify(progress_callback, "Generating findings…", 0.9)
 
         completed_at = datetime.utcnow()
         duration = time.perf_counter() - started_clock
         embed_runtime_metadata(report, started_at, completed_at=completed_at, duration=duration)
         REPORT_LOGGER.info(serialize_results(report))
+
+        _notify(progress_callback, "Reconnaissance complete.", 1.0)
 
         return report
     finally:
