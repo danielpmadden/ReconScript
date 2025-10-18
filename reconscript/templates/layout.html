@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>ReconScript Control Panel</title>
+    <title>{% block title %}ReconScript Control Panel{% endblock %}</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
       body { font-family: system-ui, sans-serif; margin: 0; background: #101820; color: #f0f4f8; }
@@ -19,6 +19,11 @@
       button:disabled { opacity: 0.5; cursor: not-allowed; }
       .warning { background: #ffc107; color: #101820; padding: 0.5rem 1rem; border-radius: 4px; margin-bottom: 1rem; font-weight: 600; }
       nav a { margin-left: 1rem; }
+      footer { padding: 1rem 2rem; background: #0b111a; font-size: 0.85rem; color: #90a4b7; }
+      #log-panel { margin-top: 2rem; background: #0b111b; border-radius: 8px; padding: 1rem; font-family: ui-monospace, SFMono-Regular, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; max-height: 240px; overflow-y: auto; }
+      #startup-overlay { position: fixed; inset: 0; background: rgba(16, 24, 32, 0.94); display: flex; align-items: center; justify-content: center; flex-direction: column; z-index: 9999; }
+      .spinner { width: 48px; height: 48px; border: 5px solid rgba(92, 200, 255, 0.3); border-top-color: #5cc8ff; border-radius: 50%; animation: spin 1s linear infinite; }
+      @keyframes spin { to { transform: rotate(360deg); } }
     </style>
     <script defer src="{{ url_for('static', filename='js/consent.js') }}"></script>
   </head>
@@ -36,15 +41,62 @@
         {% endif %}
       </nav>
     </header>
+    <div id="startup-overlay">
+      <div class="spinner" aria-hidden="true"></div>
+      <p style="margin-top:1rem;font-weight:600;">Preparing scan engine…</p>
+    </div>
     <main>
       {% if public_ui %}
         <div class="warning">Public UI mode is enabled. Ensure authentication and TLS are enforced.</div>
       {% endif %}
       {% for category, message in get_flashed_messages(with_categories=true) %}
-        <div class="flash {{ category }}">{{ message }}</div>
+        <div class="flash {{ category|e }}">{{ message|e }}</div>
       {% endfor %}
       {% block content %}{% endblock %}
+      {% if current_user.is_authenticated %}
+        <section id="log-panel" aria-live="polite" aria-label="Live scan logs">
+          <strong>Recent activity</strong>
+          <div id="log-entries"></div>
+          <div id="log-error" style="display:none;color:#ffb74d;margin-top:0.5rem;">Log stream unavailable. Check console logs.</div>
+        </section>
+      {% endif %}
     </main>
     {% include 'consent_modal.html' %}
+    <footer>
+      ReconScript v{{ recon_version }} · Environment: {{ deployment_env|e }} · Python {{ python_version|e }}
+    </footer>
+    <script>
+      const overlay = document.getElementById('startup-overlay');
+      window.addEventListener('load', () => {
+        setTimeout(() => overlay.style.display = 'none', 400);
+      });
+
+      async function fetchLogs() {
+        const logContainer = document.getElementById('log-entries');
+        const errorBanner = document.getElementById('log-error');
+        if (!logContainer) {
+          return;
+        }
+        try {
+          const response = await fetch('{{ url_for('logs_feed') }}?limit=50', { headers: { 'X-CSRF-Token': '{{ csrf_token() }}' } });
+          if (!response.ok) {
+            throw new Error('Bad response');
+          }
+          const payload = await response.json();
+          const escape = (value) => String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+          logContainer.innerHTML = payload.entries.map(entry => `<div><span style="color:#5cc8ff;">${escape(entry.level)}</span> ${escape(entry.message)}</div>`).join('');
+          errorBanner.style.display = 'none';
+        } catch (error) {
+          errorBanner.style.display = 'block';
+        }
+      }
+      setInterval(fetchLogs, 5000);
+      fetchLogs();
+    </script>
   </body>
 </html>

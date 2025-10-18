@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Sequence
 
-from nacl.signing import SigningKey
+from reconscript.consent import _load_private_key
 
 DEFAULT_KEY = Path("keys/dev_ed25519.priv")
 
@@ -41,8 +41,7 @@ def main() -> None:
     parser.add_argument("--output", type=Path, default=Path("manifest.json"))
     args = parser.parse_args()
 
-    key_bytes = args.key.read_bytes()
-    signing_key = SigningKey(key_bytes)
+    signing_key = _load_private_key(args.key)
 
     now = datetime.now(timezone.utc)
     body = {

@@ -136,5 +136,10 @@ def ensure_within_allowlist(target: ScopeValidation) -> None:
         ip_obj = ipaddress.ip_address(address)
     except ValueError as exc:  # pragma: no cover - defensive safety
         raise ScopeError("Target resolved to an invalid IP address.") from exc
-    if ip_obj.is_multicast or ip_obj.is_reserved:
-        raise ScopeError("Scanning multicast or reserved IP ranges is not permitted by default.")
+    if ip_obj.is_loopback:
+        return
+    if ip_obj.is_multicast or ip_obj.is_reserved or ip_obj.is_unspecified or ip_obj.is_link_local:
+        raise ScopeError("Targets must be routable and cannot be multicast, reserved, or link-local addresses.")
+    allow_private = os.environ.get("ALLOW_PRIVATE_NETWORKS", "false").lower() == "true"
+    if ip_obj.is_private and not allow_private:
+        raise ScopeError("Private network targets require ALLOW_PRIVATE_NETWORKS=true.")

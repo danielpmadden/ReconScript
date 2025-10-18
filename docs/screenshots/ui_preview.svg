@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540" role="img" aria-labelledby="title desc">
+  <title id="title">ReconScript UI Preview</title>
+  <desc id="desc">Stylised wireframe of the ReconScript dashboard highlighting navigation, target form, and results panel.</desc>
+  <defs>
+    <linearGradient id="bgGradient" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0%" stop-color="#101521" />
+      <stop offset="100%" stop-color="#1b2537" />
+    </linearGradient>
+    <linearGradient id="panelGradient" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0%" stop-color="#1f2940" />
+      <stop offset="100%" stop-color="#25334d" />
+    </linearGradient>
+    <linearGradient id="accentGradient" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#00d2ff" />
+      <stop offset="100%" stop-color="#0079ff" />
+    </linearGradient>
+    <linearGradient id="logGradient" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0%" stop-color="#141d2b" />
+      <stop offset="100%" stop-color="#0f1622" />
+    </linearGradient>
+    <style>
+      .label { font-family: 'Fira Sans', 'Segoe UI', sans-serif; font-size: 20px; fill: #c5d7ff; font-weight: 600; }
+      .text { font-family: 'Fira Sans', 'Segoe UI', sans-serif; font-size: 16px; fill: #9fb4e7; }
+      .small { font-size: 14px; fill: #7a8ab7; }
+      .badge { font-size: 13px; fill: #121722; font-weight: 600; }
+    </style>
+  </defs>
+  <rect width="960" height="540" fill="url(#bgGradient)" rx="24" />
+  <rect x="24" y="24" width="912" height="492" rx="20" fill="#131a28" stroke="#1e2a41" stroke-width="2" />
+  <rect x="44" y="44" width="216" height="452" rx="16" fill="#101826" stroke="#1e2a41" />
+  <rect x="280" y="44" width="636" height="120" rx="16" fill="url(#panelGradient)" />
+  <rect x="280" y="184" width="636" height="312" rx="16" fill="#111926" stroke="#1e2a41" />
+  <rect x="300" y="204" width="596" height="140" rx="12" fill="#171f2e" stroke="#273451" stroke-width="1.5" />
+  <rect x="300" y="364" width="596" height="112" rx="12" fill="url(#logGradient)" />
+  <rect x="300" y="488" width="596" height="28" rx="10" fill="#1a2537" />
+  <rect x="300" y="96" width="196" height="40" rx="10" fill="#142033" />
+  <rect x="508" y="96" width="140" height="40" rx="10" fill="#142033" />
+  <rect x="660" y="96" width="120" height="40" rx="10" fill="#142033" />
+  <rect x="800" y="96" width="96" height="40" rx="10" fill="url(#accentGradient)" />
+  <text x="84" y="92" class="label">ReconScript</text>
+  <circle cx="76" cy="72" r="16" fill="#00d2ff" opacity="0.65" />
+  <text x="76" y="76" text-anchor="middle" class="badge" fill="#051220">RS</text>
+  <text x="76" y="128" class="text">Dashboard</text>
+  <text x="76" y="168" class="text">Scans</text>
+  <text x="76" y="208" class="text">Reports</text>
+  <text x="76" y="248" class="text">Consent</text>
+  <text x="76" y="288" class="text">Settings</text>
+  <text x="76" y="328" class="text">Security</text>
+  <text x="76" y="368" class="text">Audit Logs</text>
+  <rect x="56" y="380" width="192" height="88" rx="14" fill="#0f1726" stroke="#223151" />
+  <text x="76" y="410" class="small">Target</text>
+  <text x="76" y="438" class="text">app.acme.corp</text>
+  <rect x="300" y="76" width="160" height="12" rx="6" fill="#253753" />
+  <rect x="300" y="92" width="112" height="12" rx="6" fill="#253753" />
+  <rect x="300" y="208" width="540" height="28" rx="8" fill="#1d2b40" />
+  <rect x="300" y="252" width="420" height="24" rx="8" fill="#1d2b40" />
+  <rect x="300" y="292" width="360" height="24" rx="8" fill="#1d2b40" />
+  <rect x="300" y="332" width="320" height="24" rx="8" fill="#1d2b40" />
+  <rect x="460" y="96" width="36" height="36" rx="10" fill="#141f31" />
+  <rect x="612" y="96" width="36" height="36" rx="10" fill="#141f31" />
+  <rect x="752" y="96" width="36" height="36" rx="10" fill="#141f31" />
+  <rect x="820" y="96" width="72" height="36" rx="10" fill="#00b1ff" />
+  <text x="856" y="120" text-anchor="middle" class="badge" fill="#0a1626">Scan</text>
+  <text x="320" y="120" class="text">Scope Approved</text>
+  <text x="520" y="120" class="text">Results: 6</text>
+  <text x="676" y="120" class="text">Privacy: On</text>
+  <text x="320" y="236" class="label">Recon Request</text>
+  <text x="320" y="280" class="small">Target</text>
+  <text x="320" y="320" class="small">Ports</text>
+  <text x="320" y="360" class="small">Notes</text>
+  <text x="320" y="392" class="label">Live Log Stream</text>
+  <text x="320" y="420" class="small">[12:01:07] handshake succeeded on 443</text>
+  <text x="320" y="448" class="small">[12:01:08] certificate CN matched scope</text>
+  <text x="320" y="476" class="small">[12:01:10] GET /robots.txt → 200 (cached)</text>
+  <text x="320" y="512" class="small">v0.7.0 • prod • Python 3.11</text>
+</svg>

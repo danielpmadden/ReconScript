@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>{{ title }}</title>
+    <title>{{ title|e }}</title>
     <style>
       :root {
         color-scheme: light dark;
@@ -165,12 +165,12 @@
   <body>
     <header>
       <span class="badge">ReconScript Report</span>
-      <h1>{{ target }}</h1>
+      <h1>{{ target|e }}</h1>
       <p class="meta">
-        <span>Hostname {{ hostname }}</span>
-        <span>Generated {{ generated_human }}</span>
-        <span>Findings {{ findings_count }}</span>
-        {% if runtime_duration %}<span>Duration {{ runtime_duration }}s</span>{% endif %}
+        <span>Hostname {{ hostname|e }}</span>
+        <span>Generated {{ generated_human|e }}</span>
+        <span>Findings {{ findings_count|e }}</span>
+        {% if runtime_duration %}<span>Duration {{ runtime_duration|e }}s</span>{% endif %}
       </p>
     </header>
     <main>
@@ -180,8 +180,8 @@
           <tbody>
             {% for label, value in summary_rows %}
               <tr>
-                <th scope="row">{{ label }}</th>
-                <td>{{ value }}</td>
+                <th scope="row">{{ label|e }}</th>
+                <td>{{ value|e }}</td>
               </tr>
             {% endfor %}
           </tbody>
@@ -193,7 +193,7 @@
         {% if findings %}
           {% for finding in findings %}
             <article class="finding">
-              <h3>Port {{ finding.port }} · <code>{{ finding.issue }}</code></h3>
+              <h3>Port {{ finding.port|e }} · <code>{{ finding.issue|e }}</code></h3>
               {% if finding.details %}
                 <pre>{{ finding.details | tojson(indent=2) }}</pre>
               {% else %}
@@ -214,7 +214,7 @@
           {% if recommendations %}
             <ul>
               {% for item in recommendations %}
-                <li>{{ item }}</li>
+                <li>{{ item|e }}</li>
               {% endfor %}
             </ul>
           {% else %}
@@ -228,15 +228,15 @@
         <div class="panel">
           <dl class="meta">
             {% for label, value in metadata %}
-              <dt>{{ label }}</dt>
-              <dd>{{ value }}</dd>
+              <dt>{{ label|e }}</dt>
+              <dd>{{ value|e }}</dd>
             {% endfor %}
           </dl>
         </div>
       </section>
     </main>
     <footer>
-      ReconScript v{{ version }} · Generated {{ timestamp }}
+      ReconScript v{{ version|e }} · Generated {{ timestamp|e }}
     </footer>
   </body>
 </html>

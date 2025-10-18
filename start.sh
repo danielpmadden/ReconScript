@@ -14,14 +14,23 @@ DEV_FLASK="$KEYS_DIR/dev_flask_secret.key"
 
 if [[ ! -f "$DEV_PRIV" || ! -f "$DEV_PUB" ]]; then
   python3 - "$DEV_PRIV" "$DEV_PUB" <<'PY'
-import binascii
+import base64
+import os
 import sys
-priv_hex = '9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60'
-pub_hex = 'd75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a'
-with open(sys.argv[1], 'wb') as priv_file:
-    priv_file.write(binascii.unhexlify(priv_hex))
-with open(sys.argv[2], 'wb') as pub_file:
-    pub_file.write(binascii.unhexlify(pub_hex))
+from pathlib import Path
+
+from nacl.signing import SigningKey
+
+priv_path = Path(sys.argv[1])
+pub_path = Path(sys.argv[2])
+
+seed = os.urandom(32)
+signing_key = SigningKey(seed)
+
+priv_path.write_text(base64.b64encode(seed).decode("ascii") + "\n", encoding="utf-8")
+pub_path.write_text(
+    base64.b64encode(bytes(signing_key.verify_key)).decode("ascii") + "\n", encoding="utf-8"
+)
 PY
   echo "[dev] Generated placeholder ed25519 keypair in $KEYS_DIR (replace for production)."
 fi

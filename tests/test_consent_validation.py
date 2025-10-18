@@ -6,9 +6,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
-from nacl.signing import SigningKey
-
-from reconscript.consent import ConsentError, load_manifest, validate_manifest
+from reconscript.consent import ConsentError, _load_private_key, load_manifest, validate_manifest
 
 DEV_PRIVATE = Path("keys/dev_ed25519.priv")
 
@@ -18,7 +16,7 @@ def _canonical(data: dict) -> bytes:
 
 
 def _write_manifest(tmp_path: Path, body: dict) -> Path:
-    signing_key = SigningKey(DEV_PRIVATE.read_bytes())
+    signing_key = _load_private_key(DEV_PRIVATE)
     signed = signing_key.sign(_canonical(body)).signature
     payload = {**body, "signature": base64.b64encode(signed).decode("ascii")}
     manifest_path = tmp_path / "manifest.json"

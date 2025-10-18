@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from reconscript.scanner.throttle import TokenBucket
+from reconscript.scanner import TokenBucket
 
 class FakeClock:
     def __init__(self) -> None:

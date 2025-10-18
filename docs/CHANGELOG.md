@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.7.0 - 2024-12-01
+- Hardened UI with CSRF tokens, CSP via Flask-Talisman, and anonymised log streaming.
+- Added `.env` driven configuration loader, SSRF guardrails, and safe results sandbox.
+- Refreshed documentation, security posture notes, and deterministic dependency pins.
+
 ## v0.5.0 - 2024-11-20
 - Introduced `/api/scan`, `/results`, `/results/<file>`, and `/health` endpoints with
   consistent JSON responses and Rich-formatted logging.

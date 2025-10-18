@@ -18,6 +18,7 @@ from .scanner import (
     TOKEN_CAPACITY,
     TOKEN_RATE,
     ScanConfig,
+    TokenBucket,
     check_security_headers,
     fetch_robots,
     fetch_tls_certificate,
@@ -27,7 +28,6 @@ from .scanner import (
     tcp_connect_scan,
     validate_port_list,
 )
-from .scanner.throttle import TokenBucket
 
 LOGGER = logging.getLogger(__name__)
 REPORT_LOGGER = logging.getLogger("reconscript.report")

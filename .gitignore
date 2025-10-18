@@ -208,4 +208,10 @@ __marimo__/
 
 # ReconScript artifacts
 results/
+logs/
+reports/
+*.log
+docs/security_report.json
+docs/dependency_audit.json
+docs/*.html
 

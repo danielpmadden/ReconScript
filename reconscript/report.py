@@ -15,7 +15,26 @@ from typing import Dict, Optional
 
 from .consent import sign_report_hash
 
-RESULTS_DIR = Path(os.environ.get("RESULTS_DIR", "results")).expanduser()
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_RESULTS_DIR = (PROJECT_ROOT / "results").resolve()
+
+
+def _determine_results_dir() -> Path:
+    configured = os.environ.get("RESULTS_DIR")
+    if not configured:
+        return DEFAULT_RESULTS_DIR
+    candidate = Path(configured).expanduser().resolve()
+    base = DEFAULT_RESULTS_DIR
+    try:
+        candidate.relative_to(base)
+    except ValueError as exc:
+        raise RuntimeError(
+            "RESULTS_DIR must reside within the repository's results directory to prevent traversal attacks."
+        ) from exc
+    return candidate
+
+
+RESULTS_DIR = _determine_results_dir()
 INDEX_FILE = RESULTS_DIR / "index.json"
 LOCK_PATH = RESULTS_DIR / ".index.lock"
 

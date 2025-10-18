@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import binascii
 import json
 import os
 from dataclasses import dataclass
@@ -66,12 +67,40 @@ def _canonical_json(data: Dict[str, Any]) -> bytes:
     return json.dumps(data, separators=(",", ":"), sort_keys=True).encode("utf-8")
 
 
+def _normalise_key_material(raw: bytes, *, expected_length: int, label: str) -> bytes:
+    candidate = raw.strip()
+    if len(candidate) == expected_length:
+        return candidate
+
+    try:
+        text = candidate.decode("ascii").strip()
+    except UnicodeDecodeError:
+        text = ""
+
+    if text:
+        for decoder in (
+            lambda value: base64.b64decode(value, validate=True),
+            lambda value: binascii.unhexlify(value),
+        ):
+            try:
+                decoded = decoder(text)
+            except (ValueError, binascii.Error):
+                continue
+            if len(decoded) == expected_length:
+                return decoded
+
+    raise ConsentError(
+        f"{label} must contain {expected_length} raw bytes or base64/hex encoded key material."
+    )
+
+
 def _load_public_key(path: Path) -> VerifyKey:
     try:
         raw = path.read_bytes()
     except OSError as exc:
         raise ConsentError(f"Unable to read consent public key: {exc}") from exc
-    return VerifyKey(raw)
+    key_bytes = _normalise_key_material(raw, expected_length=32, label="Consent public key")
+    return VerifyKey(key_bytes)
 
 
 def _load_private_key(path: Path) -> SigningKey:
@@ -79,7 +108,8 @@ def _load_private_key(path: Path) -> SigningKey:
         raw = path.read_bytes()
     except OSError as exc:
         raise ConsentError(f"Unable to read signing private key: {exc}") from exc
-    return SigningKey(raw)
+    key_bytes = _normalise_key_material(raw, expected_length=32, label="Report signing private key")
+    return SigningKey(key_bytes)
 
 
 def load_manifest(path: Path | str) -> ConsentManifest:

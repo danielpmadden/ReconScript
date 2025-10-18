@@ -4,6 +4,7 @@
     <h2>Launch Scoped Scan</h2>
     <p>All scans are read-only and respect signed consent manifests. Targets outside localhost require a validated manifest before scanning.</p>
     <form method="post" enctype="multipart/form-data" id="scan-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
       <label for="target">Target IP or hostname</label>
       <input type="text" id="target" name="target" required placeholder="127.0.0.1" />
 

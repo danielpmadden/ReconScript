@@ -1,18 +1,18 @@
 {% extends 'layout.html' %}
 {% block content %}
   <div class="card">
-    <h2>Report {{ report_id }}</h2>
-    <p><strong>Target:</strong> {{ report.target }}</p>
-    <p><strong>Evidence level:</strong> {{ report.evidence_level }}</p>
-    <p><strong>Report hash:</strong> {{ report.report_hash }}</p>
+    <h2>Report {{ report_id|e }}</h2>
+    <p><strong>Target:</strong> {{ report.target|e }}</p>
+    <p><strong>Evidence level:</strong> {{ report.evidence_level|e }}</p>
+    <p><strong>Report hash:</strong> {{ report.report_hash|e }}</p>
     {% if report.consent_signed_by %}
-      <p><strong>Consent signer:</strong> {{ report.consent_signed_by }}</p>
+      <p><strong>Consent signer:</strong> {{ report.consent_signed_by|e }}</p>
     {% endif %}
-    <p><strong>Started:</strong> {{ report.started_at }} | <strong>Completed:</strong> {{ report.completed_at }}</p>
+    <p><strong>Started:</strong> {{ report.started_at|e }} | <strong>Completed:</strong> {{ report.completed_at|e }}</p>
     <h3>Open ports</h3>
     <ul>
       {% for port in report.open_ports %}
-        <li>{{ port }}</li>
+        <li>{{ port|e }}</li>
       {% else %}
         <li>No open ports detected.</li>
       {% endfor %}

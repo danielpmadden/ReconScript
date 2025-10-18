@@ -8,17 +8,70 @@ import os
 import random
 import socket
 import ssl
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from http.cookies import SimpleCookie, CookieError
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from http.cookies import CookieError, SimpleCookie
+from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import requests
 from requests import Response
 from requests import exceptions as requests_exceptions
 
-from .throttle import TokenBucket
+TimeFunc = Callable[[], float]
+SleepFunc = Callable[[float], None]
+
+
+@dataclass
+class TokenBucket:
+    """Simple token bucket with thread-safe consumption."""
+
+    rate: float
+    capacity: float
+    time_func: TimeFunc = time.monotonic
+    sleep_func: SleepFunc = time.sleep
+
+    def __post_init__(self) -> None:
+        if self.rate <= 0:
+            raise ValueError("Token bucket rate must be positive.")
+        if self.capacity <= 0:
+            raise ValueError("Token bucket capacity must be positive.")
+        self._tokens = float(self.capacity)
+        self._timestamp = self.time_func()
+        self._lock = threading.Lock()
+
+    def _refill(self) -> None:
+        now = self.time_func()
+        elapsed = max(0.0, now - self._timestamp)
+        if elapsed <= 0:
+            return
+        self._timestamp = now
+        self._tokens = min(self.capacity, self._tokens + elapsed * self.rate)
+
+    def consume(self, tokens: float = 1.0) -> None:
+        if tokens <= 0:
+            return
+        slept_total = 0.0
+        while True:
+            with self._lock:
+                self._refill()
+                if self._tokens >= tokens:
+                    self._tokens -= tokens
+                    if slept_total:
+                        self._timestamp -= slept_total
+                    return
+                needed = max(0.0, (tokens - self._tokens) / self.rate)
+            if needed == 0.0:
+                continue
+            self.sleep_func(needed)
+            slept_total += needed
+
+    @property
+    def tokens_available(self) -> float:
+        with self._lock:
+            self._refill()
+            return self._tokens
 
 LOGGER = logging.getLogger(__name__)
 
@@ -363,6 +416,7 @@ __all__ = [
     "MAX_HTTP_RETRIES",
     "REDACTION_KEYS",
     "ScanConfig",
+    "TokenBucket",
     "validate_port_list",
     "resolve_addresses",
     "tcp_connect_scan",

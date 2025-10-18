@@ -5,7 +5,13 @@ from __future__ import annotations
 import json
 import logging
 import os
+import platform
+import secrets
+import socket
+import threading
+import time
 import uuid
+import webbrowser
 from functools import wraps
 from pathlib import Path
 from typing import Optional
@@ -13,13 +19,15 @@ from typing import Optional
 from flask import (
     Flask,
     abort,
+    current_app,
     flash,
+    jsonify,
     redirect,
     render_template,
     request,
     send_from_directory,
+    session,
     url_for,
-    current_app,
 )
 from flask_login import (
     LoginManager,
@@ -29,14 +37,79 @@ from flask_login import (
     login_user,
     logout_user,
 )
+from flask_talisman import Talisman
 
+from . import __version__
+from .config import load_environment
 from .consent import ConsentError, load_manifest, validate_manifest
 from .core import ReconError, run_recon
-from .logging import configure_logging
+from .logging_utils import configure_logging, get_recent_logs
 from .report import ensure_results_dir, persist_report
 from .scope import validate_target
 
 LOGGER = logging.getLogger(__name__)
+
+CSP_POLICY = {
+    "default-src": "'self'",
+    "script-src": "'self' 'unsafe-inline'",
+    "style-src": "'self' 'unsafe-inline'",
+    "img-src": "'self' data:",
+}
+
+CSRF_HEADER_NAME = "X-CSRF-Token"
+
+
+def _generate_csrf_token() -> str:
+    token = session.get("_csrf_token")
+    if not token:
+        token = secrets.token_urlsafe(32)
+        session["_csrf_token"] = token
+    return token
+
+
+def _validate_csrf() -> None:
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+        token = session.get("_csrf_token")
+        submitted = request.form.get("csrf_token") or request.headers.get(CSRF_HEADER_NAME)
+        if not token or not submitted or not secrets.compare_digest(str(token), str(submitted)):
+            abort(400)
+
+
+def _normalize_download_path(filename: str) -> str:
+    path = Path(filename)
+    if path.is_absolute() or any(part == ".." for part in path.parts):
+        abort(400)
+    return str(path)
+
+
+def _preferred_browser_host(bound_host: str) -> str:
+    if os.environ.get("WSL_INTEROP"):
+        return "localhost"
+    if bound_host in {"0.0.0.0", "::"}:
+        for candidate in ("host.docker.internal", "docker.for.mac.host.internal", "127.0.0.1"):
+            try:
+                socket.gethostbyname(candidate)
+                return candidate
+            except socket.gaierror:
+                continue
+        return "127.0.0.1"
+    return bound_host
+
+
+def _auto_launch_browser(host: str, port: int) -> None:
+    if os.environ.get("RECON_AUTOLAUNCH", "true").lower() != "true":
+        return
+
+    url = f"http://{_preferred_browser_host(host)}:{port}/"
+
+    def _opener() -> None:
+        time.sleep(1.5)
+        try:
+            webbrowser.open(url, new=2, autoraise=True)
+        except Exception as exc:  # pragma: no cover - best effort helper
+            LOGGER.debug("Browser auto-launch failed: %s", exc)
+
+    threading.Thread(target=_opener, name="reconscript-browser", daemon=True).start()
 
 
 class StaticUser(UserMixin):
@@ -84,6 +157,7 @@ def _store_upload(file_storage) -> Path:
 
 
 def create_app() -> Flask:
+    load_environment()
     configure_logging()
 
     public_ui = os.environ.get("ENABLE_PUBLIC_UI", "false").lower() == "true"
@@ -95,7 +169,24 @@ def create_app() -> Flask:
     app.config["RBAC_ENABLED"] = rbac_enabled
     app.config["PUBLIC_UI"] = public_ui
     app.config["UPLOAD_FOLDER"] = str(ensure_results_dir() / "uploads")
+    app.config["DEPLOYMENT_ENV"] = os.environ.get("RECON_ENV", "production")
     app.secret_key = _load_secret_key()
+
+    Talisman(
+        app,
+        content_security_policy=CSP_POLICY,
+        frame_options="DENY",
+        referrer_policy="no-referrer",
+        force_https=False,
+        session_cookie_secure=public_ui,
+        session_cookie_http_only=True,
+        session_cookie_samesite="Strict",
+        permissions_policy={
+            "geolocation": "()",
+            "camera": "()",
+            "microphone": "()",
+        },
+    )
 
     login_manager = LoginManager(app)
     login_manager.login_view = "login"
@@ -114,10 +205,27 @@ def create_app() -> Flask:
         return {
             "public_ui": app.config["PUBLIC_UI"],
             "rbac_enabled": app.config["RBAC_ENABLED"],
+            "csrf_token": _generate_csrf_token,
+            "recon_version": __version__,
+            "deployment_env": app.config["DEPLOYMENT_ENV"],
+            "python_version": platform.python_version(),
         }
 
-    @app.route("/healthz")
+    @app.before_request
+    def _csrf_hook() -> None:
+        _validate_csrf()
+
+    @app.errorhandler(500)
+    def handle_internal_error(exc: Exception):  # pragma: no cover - defensive
+        LOGGER.exception("Unhandled exception in UI: %s", exc)
+        return render_template("error.html", message="An unexpected error occurred. Please review the logs."), 500
+
+    @app.route("/health", methods=["GET"])
     def health() -> tuple[str, int]:
+        return jsonify(status="ok", version=__version__), 200
+
+    @app.route("/healthz", methods=["GET"])
+    def legacy_health() -> tuple[str, int]:
         return "ok", 200
 
     @app.route("/login", methods=["GET", "POST"])
@@ -208,18 +316,27 @@ def create_app() -> Flask:
     @login_required
     @_rbac_required("admin")
     def download_result(filename: str):
-        return send_from_directory(ensure_results_dir(), filename, as_attachment=True)
+        safe_name = _normalize_download_path(filename)
+        return send_from_directory(ensure_results_dir(), safe_name, as_attachment=True)
+
+    @app.route("/logs/feed")
+    @login_required
+    @_rbac_required("admin")
+    def logs_feed():
+        limit = int(request.args.get("limit", "50"))
+        return jsonify(entries=get_recent_logs(limit=limit))
 
     return app
 
 
 def main() -> None:
     app = create_app()
-    host = "0.0.0.0" if app.config["PUBLIC_UI"] else "127.0.0.1"
+    host = os.environ.get("RECON_HOST") or ("0.0.0.0" if app.config["PUBLIC_UI"] else "127.0.0.1")
     port = int(os.environ.get("DEFAULT_PORT", "5000"))
     LOGGER.warning("UI running with RBAC %s", "enabled" if app.config["RBAC_ENABLED"] else "disabled")
     if app.config["PUBLIC_UI"]:
         LOGGER.warning("Public UI mode enabled — ensure reverse proxy protections are in place.")
+    _auto_launch_browser(host, port)
     app.run(host=host, port=port, threaded=True)
 
 

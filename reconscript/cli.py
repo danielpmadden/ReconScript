@@ -9,9 +9,10 @@ from pathlib import Path
 from typing import Iterable, Optional
 
 from . import __version__
+from .config import load_environment
 from .consent import ConsentError, ConsentManifest, load_manifest, validate_manifest
 from .core import ReconError, run_recon
-from .logging import configure_logging
+from .logging_utils import configure_logging
 from .report import persist_report
 from .reporters import render_json, write_report
 
@@ -71,6 +72,7 @@ def _load_and_validate_manifest(path: Path) -> ConsentManifest:
 
 
 def main(argv: Optional[Iterable[str]] = None) -> int:
+    load_environment()
     parser = build_parser()
     args = parser.parse_args(argv)
 

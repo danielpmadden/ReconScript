@@ -1,0 +1,8 @@
+{% extends 'layout.html' %}
+{% block content %}
+  <div class="card" role="alert">
+    <h2>We hit a snag</h2>
+    <p>{{ message|e }}</p>
+    <p>Please review the recent activity logs or contact the maintainer.</p>
+  </div>
+{% endblock %}
