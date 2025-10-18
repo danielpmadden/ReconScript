@@ -1,0 +1,6 @@
+PLACEHOLDER for preview.png
+To generate a current UI screenshot:
+1. Start the application (see README).
+2. Open the web UI in a browser at http://127.0.0.1:5000/.
+3. Capture a full-page screenshot and save it as docs/screenshots/preview.png.
+Do not commit the binary screenshot. Use Git LFS or keep it local.

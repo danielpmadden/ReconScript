@@ -1,0 +1,10 @@
+* text=auto eol=lf
+*.png -diff
+*.jpg -diff
+*.jpeg -diff
+*.gif -diff
+*.pdf -diff
+*.zip -diff
+*.gz -diff
+*.tar -diff
+*.mp4 -diff
