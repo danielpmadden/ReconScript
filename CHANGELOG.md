@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.6.1 - 2025-01-15
+- Documented installation, validation, and troubleshooting guidance for long-term maintainability.
+- Added roadmap notes covering security follow-ups, dependency policies, and planned enhancements.
+- Introduced a dependency overview document and refreshed repository layout descriptions.
+- Updated packaging metadata, development requirements, and CI workflow to align with 2026 Python tooling expectations.
+- Added an MIT `LICENSE` file and reaffirmed author attribution for Daniel Madden.
+
 ## v0.5.0 - 2024-11-20
 - Introduced `/api/scan`, `/results`, `/results/<file>`, and `/health` endpoints with
   consistent JSON responses and Rich-formatted logging.

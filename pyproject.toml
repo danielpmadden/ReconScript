@@ -8,8 +8,8 @@ name = "reconscript"
 version = "0.6.0"
 description = "Safe, read-only reconnaissance helper for authorized assessments only; use responsibly within agreed scope."
 readme = "README.md"
-requires-python = ">=3.11"
-license = { text = "MIT" }
+requires-python = ">=3.9"
+license = "MIT"
 
 authors = [{ name = "Daniel Madden" }]
 keywords = ["reconnaissance", "security", "safety"]
@@ -20,6 +20,7 @@ classifiers = [
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
   "License :: OSI Approved :: MIT License",
   "Intended Audience :: Information Technology",
   "Topic :: Security",
@@ -41,6 +42,7 @@ dependencies = [
 dev = [
   "black==24.4.2",
   "ruff==0.5.4",
+  "bandit==1.7.9",
   "pip-audit==2.7.3",
   "pytest==8.2.2"
 ]
@@ -57,6 +59,7 @@ reconscript = "reconscript.cli:main"
 [tool.setuptools]
 packages = ["reconscript"]
 include-package-data = true
+license-files = ["LICENSE"]
 
 [tool.setuptools.package-data]
 reconscript = ["templates/*.html", "templates/*.j2", "static/*", "static/js/*.js"]
