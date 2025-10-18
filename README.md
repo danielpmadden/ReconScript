@@ -1,6 +1,6 @@
 # ReconScript
 
-ReconScript is a read-only reconnaissance toolkit maintained by Daniel Madden. It collects metadata from approved targets, consolidates the findings into human-readable reports, and keeps each action auditable for regulated environments. The project ships with both a Flask web interface and a command-line client so assessments can run in whichever workflow is most convenient.
+ReconScript is a read-only reconnaissance toolkit. It collects metadata from approved targets, consolidates the findings into human-readable reports, and keeps each action auditable for regulated environments. The project ships with both a Flask web interface and a command-line client so assessments can run in whichever workflow is most convenient.
 
 ## Key Features
 - **Safety-first design:** All gathering routines are scoped to passive network inspection so the tool can be reviewed and approved for tightly controlled engagements.
