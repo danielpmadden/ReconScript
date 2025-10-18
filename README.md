@@ -168,7 +168,7 @@ ENABLE_IPV6=true
 
 ## Contributing
 
-We welcome ideas, bug reports, and pull requests:
+I welcome ideas, bug reports, and pull requests:
 
 1. Fork the repository.
 2. Create a feature branch (`git checkout -b feature/amazing-improvement`).
