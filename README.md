@@ -222,7 +222,7 @@ python scripts/generate_scope_manifest.py \
   --output dev-manifest.json
 ```
 
-## Environment quick reference
+## Environment quick references
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
