@@ -10,6 +10,11 @@ from typing import Iterable, Optional, Sequence
 
 from . import __version__
 from .consent import ConsentManifest
+from .metrics import (
+    record_scan_completed,
+    record_scan_failed,
+    record_scan_started,
+)
 from .report import embed_runtime_metadata
 from .scope import ScopeValidation, ScopeError, ensure_within_allowlist, validate_target
 from .scanner import (
@@ -92,103 +97,150 @@ def run_recon(
     if evidence_level not in EVIDENCE_LEVELS:
         raise ReconError(f"Evidence level must be one of {sorted(EVIDENCE_LEVELS)}")
 
+    record_scan_started(target)
+    failure_reason: str | None = None
+
     try:
         scope = validate_target(target, expected_ip=expected_ip)
         ensure_within_allowlist(scope)
-    except ScopeError as exc:
-        raise ReconError(str(exc)) from exc
 
-    candidates = list(ports) if ports else list(DEFAULT_PORTS)
-    port_list = validate_port_list(candidates)
+        candidates = list(ports) if ports else list(DEFAULT_PORTS)
+        try:
+            port_list = validate_port_list(candidates)
+        except ReconError:
+            failure_reason = "port_validation_failed"
+            raise
 
-    manifest = _validate_consent(
-        manifest=consent_manifest,
-        target=scope,
-        requested_ports=port_list,
-        evidence_level=evidence_level,
-    )
+        try:
+            manifest = _validate_consent(
+                manifest=consent_manifest,
+                target=scope,
+                requested_ports=port_list,
+                evidence_level=evidence_level,
+            )
+        except ReconError:
+            failure_reason = "consent_validation_failed"
+            raise
 
-    redactions = _determine_redactions(extra_redactions)
-    bucket = TokenBucket(rate=TOKEN_RATE, capacity=TOKEN_CAPACITY)
+        redactions = _determine_redactions(extra_redactions)
+        bucket = TokenBucket(rate=TOKEN_RATE, capacity=TOKEN_CAPACITY)
 
-    started_at = datetime.now(timezone.utc)
-    report: dict[str, object] = {
-        "target": scope.target,
-        "hostname": hostname,
-        "ports": list(port_list),
-        "version": __version__,
-        "evidence_level": evidence_level,
-    }
-    if manifest:
-        report["consent_signed_by"] = manifest.signer_display
+        started_at = datetime.now(timezone.utc)
+        report: dict[str, object] = {
+            "target": scope.target,
+            "hostname": hostname,
+            "ports": list(port_list),
+            "version": __version__,
+            "evidence_level": evidence_level,
+        }
+        if manifest:
+            report["consent_signed_by"] = manifest.signer_display
 
-    embed_runtime_metadata(report, started_at)
+        embed_runtime_metadata(report, started_at)
 
-    if dry_run:
-        LOGGER.info("Dry-run requested; network operations skipped.")
-        report.update(
-            {
-                "open_ports": [],
-                "http_checks": {},
-                "tls_cert": None,
-                "robots": {"note": "dry-run"},
-                "findings": [],
-            }
+        if dry_run:
+            LOGGER.info(
+                "Dry-run requested; network operations skipped.",
+                extra={"event": "scan.dry_run", "target": scope.target},
+            )
+            report.update(
+                {
+                    "open_ports": [],
+                    "http_checks": {},
+                    "tls_cert": None,
+                    "robots": {"note": "dry-run"},
+                    "findings": [],
+                }
+            )
+            embed_runtime_metadata(report, started_at, completed_at=started_at, duration=0.0)
+            record_scan_completed(scope.target, 0.0, 0)
+            REPORT_LOGGER.info(serialize_results(report))
+            return report
+
+        config = ScanConfig(
+            target=scope.resolved_ip or scope.target,
+            hostname=hostname,
+            ports=port_list,
+            enable_ipv6=enable_ipv6,
+            evidence_level=evidence_level,
+            redaction_keys=redactions,
         )
-        embed_runtime_metadata(report, started_at, completed_at=started_at, duration=0.0)
+
+        http_host = _hostname_for_requests(scope, hostname)
+        started_clock = time.perf_counter()
+
+        if progress_callback:
+            progress_callback("Starting TCP connect scan", 0.1)
+        try:
+            open_ports = tcp_connect_scan(config, bucket)
+        except Exception:
+            failure_reason = "tcp_scan_failed"
+            raise
+        report["open_ports"] = open_ports
+
+        http_results: dict[int, dict[str, object]] = {}
+        if open_ports:
+            if progress_callback:
+                progress_callback("Collecting HTTP metadata", 0.4)
+            try:
+                http_results = http_probe_services(config, http_host, open_ports)
+            except Exception:
+                failure_reason = "http_probe_failed"
+                raise
+        report["http_checks"] = http_results
+
+        tls_details = None
+        if any(port in (443, 8443) for port in open_ports):
+            if progress_callback:
+                progress_callback("Retrieving TLS certificates", 0.6)
+            tls_port = 443 if 443 in open_ports else 8443
+            try:
+                tls_details = fetch_tls_certificate(config, tls_port)
+            except Exception:
+                failure_reason = "tls_probe_failed"
+                raise
+        report["tls_cert"] = tls_details
+
+        if progress_callback:
+            progress_callback("Fetching robots.txt", 0.75)
+        try:
+            report["robots"] = fetch_robots(config, http_host)
+        except Exception:
+            failure_reason = "robots_fetch_failed"
+            raise
+
+        if progress_callback:
+            progress_callback("Generating findings", 0.9)
+        try:
+            report["findings"] = generate_findings(http_results)
+        except Exception:
+            failure_reason = "finding_generation_failed"
+            raise
+
+        completed_at = datetime.now(timezone.utc)
+        duration = time.perf_counter() - started_clock
+        embed_runtime_metadata(report, started_at, completed_at=completed_at, duration=duration)
+        record_scan_completed(scope.target, duration, len(open_ports))
         REPORT_LOGGER.info(serialize_results(report))
+
+        if progress_callback:
+            progress_callback("Reconnaissance complete", 1.0)
+
         return report
+    except ScopeError as exc:
+        failure_reason = failure_reason or "scope_validation_failed"
+        raise ReconError(str(exc)) from exc
+    except ReconError:
+        failure_reason = failure_reason or "recon_error"
+        raise
+    except Exception:
+        failure_reason = failure_reason or "unexpected_error"
+        raise
+    finally:
+        if failure_reason is not None:
+            record_scan_failed(target, failure_reason)
 
-    config = ScanConfig(
-        target=scope.resolved_ip or scope.target,
-        hostname=hostname,
-        ports=port_list,
-        enable_ipv6=enable_ipv6,
-        evidence_level=evidence_level,
-        redaction_keys=redactions,
-    )
 
-    http_host = _hostname_for_requests(scope, hostname)
-
-    started_clock = time.perf_counter()
-
-    if progress_callback:
-        progress_callback("Starting TCP connect scan", 0.1)
-    open_ports = tcp_connect_scan(config, bucket)
-    report["open_ports"] = open_ports
-
-    http_results: dict[int, dict[str, object]] = {}
-    if open_ports:
-        if progress_callback:
-            progress_callback("Collecting HTTP metadata", 0.4)
-        http_results = http_probe_services(config, http_host, open_ports)
-    report["http_checks"] = http_results
-
-    tls_details = None
-    if any(port in (443, 8443) for port in open_ports):
-        if progress_callback:
-            progress_callback("Retrieving TLS certificates", 0.6)
-        tls_port = 443 if 443 in open_ports else 8443
-        tls_details = fetch_tls_certificate(config, tls_port)
-    report["tls_cert"] = tls_details
-
-    if progress_callback:
-        progress_callback("Fetching robots.txt", 0.75)
-    report["robots"] = fetch_robots(config, http_host)
-
-    if progress_callback:
-        progress_callback("Generating findings", 0.9)
-    report["findings"] = generate_findings(http_results)
-
-    completed_at = datetime.now(timezone.utc)
-    duration = time.perf_counter() - started_clock
-    embed_runtime_metadata(report, started_at, completed_at=completed_at, duration=duration)
-    REPORT_LOGGER.info(serialize_results(report))
-
-    if progress_callback:
-        progress_callback("Reconnaissance complete", 1.0)
-
-    return report
 
 
 __all__ = [

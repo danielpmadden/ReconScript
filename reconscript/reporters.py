@@ -9,7 +9,7 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 PROJECT_TEMPLATES = PACKAGE_DIR.parent / "templates"
@@ -53,16 +53,10 @@ def render_markdown(data: Dict[str, object]) -> str:
         except Exception:
             pass
 
-    target = data.get('target', 'unknown')
-    timestamp = data.get('timestamp', datetime.utcnow().isoformat() + 'Z')
-    hostname = data.get('hostname') or 'N/A'
-    ports = _format_list(data.get('ports', []))
-    open_ports = _format_list(data.get('open_ports', []))
-    findings = data.get('findings', [])
-    recommendations = _build_recommendations(findings)
+    context = _build_markdown_context(data)
+    lines = _render_markdown_sections(context)
+    return "\n".join(lines) + "\n"
 
-    lines: List[str] = [
-        f
 
 def render_html(data: Dict[str, object], out_path: Path) -> Path:
     """Render the report data as HTML and persist it to ``out_path``."""
@@ -153,6 +147,73 @@ def _build_recommendations(findings: Sequence[Dict[str, object]]) -> List[str]:
     if not suggestions and findings:
         suggestions.append("Investigate informational findings for context-specific remediation.")
     return suggestions
+
+
+def _build_markdown_context(data: Dict[str, object]) -> Dict[str, Any]:
+    findings = data.get("findings", [])
+    context = {
+        "target": data.get("target", "unknown"),
+        "timestamp": data.get("timestamp", datetime.utcnow().isoformat() + "Z"),
+        "hostname": data.get("hostname") or "N/A",
+        "ports": _format_list(data.get("ports", [])) or "None",
+        "open_ports": _format_list(data.get("open_ports", [])) or "None detected",
+        "findings": findings if isinstance(findings, Sequence) else [],
+        "recommendations": _build_recommendations(findings if isinstance(findings, Sequence) else []),
+        "version": data.get("version", __version__),
+        "runtime": data.get("runtime", {}),
+    }
+    return context
+
+
+def _render_markdown_sections(context: Dict[str, Any]) -> List[str]:
+    lines: List[str] = [
+        f"# ReconScript Report — {context['target']}",
+        "",
+        f"*Generated:* {context['timestamp']}",
+        f"*Hostname:* {context['hostname']}",
+        f"*Ports scanned:* {context['ports']}",
+        f"*Open ports:* {context['open_ports']}",
+        "",
+        "## Findings",
+    ]
+
+    findings = context.get("findings", [])
+    if findings:
+        for item in findings:
+            port = item.get("port", "n/a") if isinstance(item, dict) else "n/a"
+            issue = item.get("issue", "observation") if isinstance(item, dict) else str(item)
+            lines.append(f"- Port `{port}` — `{issue}`")
+            if isinstance(item, dict) and item.get("details") is not None:
+                details = item["details"]
+                if isinstance(details, (dict, list)):
+                    rendered = json.dumps(details, indent=2, sort_keys=True)
+                    lines.append("  ```json")
+                    lines.extend(f"  {line}" for line in rendered.splitlines())
+                    lines.append("  ```")
+                else:
+                    lines.append(f"  {details}")
+    else:
+        lines.append("No findings reported.")
+
+    lines.append("")
+    lines.append("## Recommendations")
+    recommendations = context.get("recommendations", [])
+    if recommendations:
+        for recommendation in recommendations:
+            lines.append(f"- {recommendation}")
+    else:
+        lines.append("- Maintain current controls; no immediate actions identified.")
+
+    runtime = json.dumps(context.get("runtime", {}), indent=2, sort_keys=True)
+    lines.extend(
+        [
+            "",
+            "## Metadata",
+            f"- **Report version:** {context['version']}",
+            f"- **Runtime:** {runtime}",
+        ]
+    )
+    return lines
 
 
 def _build_template_context(data: Dict[str, object]) -> Dict[str, object]:

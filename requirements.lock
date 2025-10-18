@@ -2,6 +2,7 @@
 requests==2.31.0
 rich==13.7.0
 weasyprint==61.2
+prometheus-client==0.20.0
 # Development extras
 pytest==7.4.4
 responses==0.25.0

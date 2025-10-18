@@ -3,3 +3,4 @@ ruff==0.5.4
 bandit==1.7.9
 pip-audit==2.7.3
 pytest==8.2.2
+prometheus-client==0.20.0

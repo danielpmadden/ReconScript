@@ -4,11 +4,11 @@
     <h2>Authenticate</h2>
     <form method="post">
       <label for="username">Username</label>
-      <input type="text" id="username" name="username" required />
+      <input type="text" id="username" name="username" autocomplete="username" required />
       <label for="password">Password</label>
-      <input type="password" id="password" name="password" required />
+      <input type="password" id="password" name="password" autocomplete="current-password" required aria-describedby="password-help" />
       <button type="submit">Sign in</button>
     </form>
-    <p style="margin-top:1rem;font-size:0.85rem;">Default credentials are sourced from <code>ADMIN_USER</code>/<code>ADMIN_PASSWORD</code>.</p>
+    <p id="password-help" style="margin-top:1rem;font-size:0.85rem;">Credentials are sourced from the <code>ADMIN_USER</code> and <code>ADMIN_PASSWORD</code> environment variables. Default credentials are blocked in production builds.</p>
   </div>
 {% endblock %}

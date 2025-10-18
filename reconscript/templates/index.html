@@ -24,15 +24,15 @@
       </select>
 
       <label for="consent_file">Signed consent manifest (.json)</label>
-      <input type="file" id="consent_file" name="consent_file" accept="application/json" />
+      <input type="file" id="consent_file" name="consent_file" accept="application/json" aria-describedby="consent-help" />
       <div style="margin-top:0.5rem;">
-        <input type="checkbox" id="consent_confirm" />
+        <input type="checkbox" id="consent_confirm" aria-describedby="consent-help" />
         <label for="consent_confirm" style="display:inline; font-weight:400;">I confirm this manifest authorises the requested scope.</label>
       </div>
 
       <button type="submit" id="submit-btn" disabled>Run Scan</button>
     </form>
-    <p style="margin-top:1rem; font-size:0.9rem;">
+    <p id="consent-help" style="margin-top:1rem; font-size:0.9rem;">
       Need a manifest? Use <code>scripts/generate_scope_manifest.py</code> and have the asset owner sign it.
     </p>
   </div>
