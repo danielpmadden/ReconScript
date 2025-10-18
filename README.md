@@ -89,7 +89,6 @@ docker run --rm -p 5000:5000 -v ${PWD}/results:/app/results reconscript
 ```bash
 python -m reconscript --target 127.0.0.1 --ports 80 443 8080 --format html
 ```
-
 ---
 
 ## Architecture Overview
