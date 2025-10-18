@@ -17,10 +17,10 @@ A current UI capture lives at `docs/screenshots/preview.png.placeholder.txt`. Fo
 ---
 
 ## Overview
-- 🛰️ **Purpose-built for safety:** TCP connect probing, HTTP/TLS metadata, and consent manifest tracking keep operations auditable.
-- ⚙️ **Multiple delivery modes:** Launch via CLI, Flask web UI, or Docker for quick demos and workshops.
-- 📘 **Reporting your way:** Export HTML dashboards, JSON artifacts, Markdown briefs, or PDFs for stakeholders.
-- 🔐 **Ethical guardrails:** Development keys and manifests make it clear what to replace before any production use.
+- **Purpose-built for safety:** TCP connect probing, HTTP/TLS metadata, and consent manifest tracking keep operations auditable.
+- **Multiple delivery modes:** Launch via CLI, Flask web UI, or Docker for quick demos and workshops.
+- **Reporting your way:** Export HTML dashboards, JSON artifacts, Markdown briefs, or PDFs for stakeholders.
+- **Ethical guardrails:** Development keys and manifests make it clear what to replace before any production use.
 
 ---
 
