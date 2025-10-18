@@ -7,6 +7,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+ARG INCLUDE_DEV_KEYS=false
+
 COPY requirements.txt ./
 
 RUN python -m venv /opt/venv \
@@ -20,6 +22,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH="/opt/venv/bin:${PATH}"
 
 WORKDIR /app
+
+ARG INCLUDE_DEV_KEYS=false
 
 RUN apt-get update \
     && apt-get install --no-install-recommends -y \
@@ -38,10 +42,14 @@ RUN apt-get update \
 COPY --from=builder /opt/venv /opt/venv
 COPY . .
 
-RUN chown -R reconscript:reconscript /app
+RUN if [ "$INCLUDE_DEV_KEYS" != "true" ]; then rm -f keys/dev_*; fi \
+    && chown -R reconscript:reconscript /app
 
 USER reconscript
 
 EXPOSE 5000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/healthz', timeout=3)"
 
 CMD ["python", "start.py"]

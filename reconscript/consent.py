@@ -14,8 +14,7 @@ from nacl import exceptions as nacl_exceptions
 from nacl.signing import SigningKey, VerifyKey
 
 SCHEMA_PATH = Path(__file__).resolve().parent / "schemas" / "scope_manifest.v1.json"
-DEFAULT_PUBLIC_KEY = Path(os.environ.get("CONSENT_PUBLIC_KEY_PATH", "keys/dev_ed25519.pub"))
-DEFAULT_PRIVATE_KEY = Path(os.environ.get("REPORT_SIGNING_KEY_PATH", "keys/dev_ed25519.priv"))
+DEV_KEYS_DIR = Path(__file__).resolve().parents[1] / "keys"
 
 
 class ConsentError(ValueError):
@@ -66,20 +65,51 @@ def _canonical_json(data: Dict[str, Any]) -> bytes:
     return json.dumps(data, separators=(",", ":"), sort_keys=True).encode("utf-8")
 
 
-def _load_public_key(path: Path) -> VerifyKey:
+def _allow_dev_secrets() -> bool:
+    return os.environ.get("ALLOW_DEV_SECRETS", "false").lower() == "true"
+
+
+def _guard_key_path(path: Path, *, env_var: str) -> Path:
+    resolved = path.expanduser().resolve()
+    if not resolved.exists():
+        raise ConsentError(f"{env_var} must point to an existing file (got {resolved}).")
     try:
-        raw = path.read_bytes()
+        if DEV_KEYS_DIR in resolved.parents and not _allow_dev_secrets():
+            raise ConsentError(
+                f"{env_var} references developer sample keys. Provide production keys or set ALLOW_DEV_SECRETS=true for local testing."
+            )
+    except ConsentError:
+        raise
+    except Exception:
+        pass
+    return resolved
+
+
+def _load_public_key(path: Path) -> VerifyKey:
+    resolved = _guard_key_path(path, env_var="CONSENT_PUBLIC_KEY_PATH")
+    try:
+        raw = resolved.read_bytes()
     except OSError as exc:
         raise ConsentError(f"Unable to read consent public key: {exc}") from exc
     return VerifyKey(raw)
 
 
 def _load_private_key(path: Path) -> SigningKey:
+    resolved = _guard_key_path(path, env_var="REPORT_SIGNING_KEY_PATH")
     try:
-        raw = path.read_bytes()
+        raw = resolved.read_bytes()
     except OSError as exc:
         raise ConsentError(f"Unable to read signing private key: {exc}") from exc
     return SigningKey(raw)
+
+
+def _resolve_key_path(provided: Optional[Path], env_var: str) -> Path:
+    if provided is not None:
+        return _guard_key_path(provided, env_var=env_var)
+    env_value = os.environ.get(env_var)
+    if not env_value:
+        raise ConsentError(f"{env_var} must be set to the path of the authorised signing key.")
+    return _guard_key_path(Path(env_value), env_var=env_var)
 
 
 def load_manifest(path: Path | str) -> ConsentManifest:
@@ -127,7 +157,7 @@ def load_manifest(path: Path | str) -> ConsentManifest:
 
 
 def validate_manifest(manifest: ConsentManifest, *, public_key_path: Optional[Path] = None) -> ConsentValidationResult:
-    key_path = public_key_path or DEFAULT_PUBLIC_KEY
+    key_path = _resolve_key_path(public_key_path, "CONSENT_PUBLIC_KEY_PATH")
     verify_key = _load_public_key(key_path)
 
     body = {
@@ -148,7 +178,7 @@ def validate_manifest(manifest: ConsentManifest, *, public_key_path: Optional[Pa
 
     try:
         verify_key.verify(_canonical_json(body), signature_bytes)
-    except nacl_exceptions.BadSignatureError as exc:
+    except (nacl_exceptions.BadSignatureError, ValueError) as exc:
         raise ConsentError("Consent manifest signature could not be verified.") from exc
 
     now = datetime.now(timezone.utc)
@@ -159,7 +189,7 @@ def validate_manifest(manifest: ConsentManifest, *, public_key_path: Optional[Pa
 
 
 def sign_report_hash(report_hash: str, *, private_key_path: Optional[Path] = None) -> bytes:
-    key_path = private_key_path or DEFAULT_PRIVATE_KEY
+    key_path = _resolve_key_path(private_key_path, "REPORT_SIGNING_KEY_PATH")
     signing_key = _load_private_key(key_path)
     message = report_hash.encode("utf-8")
     signed = signing_key.sign(message)

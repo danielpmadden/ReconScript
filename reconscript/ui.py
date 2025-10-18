@@ -14,12 +14,13 @@ from flask import (
     Flask,
     abort,
     flash,
+    current_app,
     redirect,
     render_template,
+    Response,
     request,
     send_from_directory,
     url_for,
-    current_app,
 )
 from flask_login import (
     LoginManager,
@@ -33,10 +34,12 @@ from flask_login import (
 from .consent import ConsentError, load_manifest, validate_manifest
 from .core import ReconError, run_recon
 from .logging import configure_logging
+from .metrics import metrics_payload
 from .report import ensure_results_dir, persist_report
 from .scope import validate_target
 
 LOGGER = logging.getLogger(__name__)
+DEV_KEYS_DIR = Path(__file__).resolve().parents[1] / "keys"
 
 
 class StaticUser(UserMixin):
@@ -45,12 +48,40 @@ class StaticUser(UserMixin):
         self.role = role
 
 
-def _load_secret_key() -> bytes:
-    secret_path = Path(os.environ.get("FLASK_SECRET_KEY_FILE", "keys/dev_flask_secret.key"))
+def _allow_dev_secrets() -> bool:
+    return os.environ.get("ALLOW_DEV_SECRETS", "false").lower() == "true"
+
+
+def _enforce_secret_path(path: Path, *, env_var: str) -> Path:
+    resolved = path.expanduser().resolve()
+    if not resolved.exists():
+        raise RuntimeError(f"{env_var} must point to an existing file (got {resolved}).")
     try:
-        return secret_path.read_bytes().strip()
+        if DEV_KEYS_DIR in resolved.parents and not _allow_dev_secrets():
+            raise RuntimeError(
+                f"{env_var} refers to a developer sample key. Provide deployment-specific secrets or set ALLOW_DEV_SECRETS=true for local testing."
+            )
+    except RuntimeError:
+        raise
+    except Exception:
+        pass
+    return resolved
+
+
+def _load_secret_key() -> bytes:
+    secret_env = os.environ.get("FLASK_SECRET_KEY_FILE")
+    if not secret_env:
+        raise RuntimeError(
+            "FLASK_SECRET_KEY_FILE environment variable must reference a secure secret key file."
+        )
+    secret_path = _enforce_secret_path(Path(secret_env), env_var="FLASK_SECRET_KEY_FILE")
+    try:
+        secret = secret_path.read_bytes().strip()
     except OSError as exc:
         raise RuntimeError(f"Unable to read Flask secret key from {secret_path}: {exc}") from exc
+    if not secret:
+        raise RuntimeError(f"Secret key file {secret_path} is empty.")
+    return secret
 
 
 def _rbac_required(role: str):
@@ -69,8 +100,14 @@ def _rbac_required(role: str):
 
 
 def _load_user_credentials() -> tuple[str, str]:
-    username = os.environ.get("ADMIN_USER", "admin")
-    password = os.environ.get("ADMIN_PASSWORD", "changeme")
+    username = os.environ.get("ADMIN_USER", "").strip()
+    password = os.environ.get("ADMIN_PASSWORD", "").strip()
+    if not username or not password:
+        raise RuntimeError("ADMIN_USER and ADMIN_PASSWORD must be set for the ReconScript UI.")
+    if not _allow_dev_secrets() and (username == "admin" or password == "changeme"):
+        raise RuntimeError("Default credentials are not permitted. Set strong ADMIN_USER and ADMIN_PASSWORD values.")
+    if len(password) < 12 and not _allow_dev_secrets():
+        raise RuntimeError("ADMIN_PASSWORD must be at least 12 characters long.")
     return username, password
 
 
@@ -120,11 +157,22 @@ def create_app() -> Flask:
     def health() -> tuple[str, int]:
         return "ok", 200
 
+    @app.route("/metrics")
+    def metrics() -> Response:
+        payload, content_type = metrics_payload()
+        if not payload:
+            return Response("", status=204)
+        return Response(payload, mimetype=content_type)
+
     @app.route("/login", methods=["GET", "POST"])
     def login():
         if request.method == "POST":
             submitted_user = request.form.get("username", "")
             submitted_pass = request.form.get("password", "")
+            LOGGER.info(
+                "ui.login.attempt",
+                extra={"event": "ui.login.attempt", "username": submitted_user, "success": submitted_user == username and submitted_pass == password},
+            )
             if submitted_user == username and submitted_pass == password:
                 login_user(user)
                 return redirect(url_for("index"))
@@ -170,9 +218,21 @@ def create_app() -> Flask:
                 flash(f"Consent manifest invalid: {exc}", "error")
                 if consent_path:
                     consent_path.unlink(missing_ok=True)
+                LOGGER.warning("ui.consent.invalid", extra={"event": "ui.consent.invalid", "target": target, "error": str(exc)})
                 return render_template("index.html")
 
             try:
+                LOGGER.info(
+                    "ui.scan.request",
+                    extra={
+                        "event": "ui.scan.request",
+                        "target": target,
+                        "hostname": hostname,
+                        "ports": ports,
+                        "expected_ip": expected_ip,
+                        "evidence_level": evidence_level,
+                    },
+                )
                 report = run_recon(
                     target=target,
                     hostname=hostname,
@@ -185,11 +245,21 @@ def create_app() -> Flask:
                 flash(str(exc), "error")
                 if consent_path:
                     consent_path.unlink(missing_ok=True)
+                LOGGER.error("ui.scan.failed", extra={"event": "ui.scan.failed", "target": target, "error": str(exc)})
                 return render_template("index.html")
 
             persisted = persist_report(report, consent_source=consent_path, sign=False)
             if consent_path:
                 consent_path.unlink(missing_ok=True)
+            LOGGER.info(
+                "ui.scan.completed",
+                extra={
+                    "event": "ui.scan.completed",
+                    "target": target,
+                    "report_id": persisted.report_id,
+                    "open_ports": report.get("open_ports", []),
+                },
+            )
             return redirect(url_for("report_detail", report_id=persisted.report_id))
         return render_template("index.html")
 

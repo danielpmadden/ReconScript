@@ -64,6 +64,15 @@ license-files = ["LICENSE"]
 [tool.setuptools.package-data]
 reconscript = ["templates/*.html", "templates/*.j2", "static/*", "static/js/*.js"]
 
+[tool.ruff]
+target-version = "py39"
+line-length = 100
+exclude = ["results"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S"]
+ignore = ["S101"]
+
 [tool.pytest.ini_options]
 addopts = "-ra"
 testpaths = ["tests"]
