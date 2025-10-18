@@ -209,3 +209,14 @@ __marimo__/
 # ReconScript artifacts
 results/
 
+
+# Binary assets (keep placeholders only)
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.pdf
+*.zip
+*.tar
+*.gz
+*.mp4
