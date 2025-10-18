@@ -1,119 +1,88 @@
 # ReconScript
-*Safe, authorized reconnaissance with human-friendly reporting.*
 
-![Python](https://img.shields.io/badge/Python-3.9%E2%80%933.13-3776AB?logo=python&logoColor=white)
-![Flask](https://img.shields.io/badge/Flask-Web%20UI-000000?logo=flask)
-![License](https://img.shields.io/badge/License-MIT-yellow)
-![Status](https://img.shields.io/badge/Status-Active-blue)
-![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey)
+ReconScript is a read-only reconnaissance toolkit maintained by Daniel Madden. It collects metadata from approved targets, consolidates the findings into human-readable reports, and keeps each action auditable for regulated environments. The project ships with both a Flask web interface and a command-line client so assessments can run in whichever workflow is most convenient.
 
-> ReconScript is Daniel Madden's ethical reconnaissance lab: a calm, non-destructive framework for inspecting approved targets and producing polished reports without touching exploitation tooling.
+## Key Features
+- **Safety-first design:** All gathering routines are scoped to passive network inspection so the tool can be reviewed and approved for tightly controlled engagements.
+- **Multiple execution paths:** Start the Flask dashboard, use the CLI, or run the Docker image to match local policy requirements.
+- **Structured reporting:** Export HTML, Markdown, JSON, or PDF artefacts, each tagged with metadata for downstream review.
+- **Operational guardrails:** Environment variables, consent manifests, and placeholder keys highlight what must be configured before running against production targets.
 
----
+## Project Layout
+The repository follows a conventional Python structure with documentation and automation assets kept alongside the source code. A more detailed component map lives in [`docs/DEPENDENCY_OVERVIEW.md`](docs/DEPENDENCY_OVERVIEW.md).
 
-## Preview
-A current UI capture lives at `docs/screenshots/preview.png.placeholder.txt`. Follow the instructions inside to generate the screenshot locally without committing binaries.
+```
+ReconScript
+├── reconscript/        → Application package (Flask views, scanners, exporters)
+├── templates/          → HTML and Markdown templates used by the web UI
+├── scripts/            → Utility scripts for keys, manifests, and environment setup
+├── tests/              → Pytest suites covering CLI and UI behaviours
+├── docs/               → Additional guides, references, and architecture notes
+└── results/            → Generated reports (ignored by Git)
+```
 
----
+## Installation
+ReconScript targets Python 3.9 through 3.13 on Linux, macOS, and Windows. The commands below create an isolated environment, install dependencies, and verify the installation.
 
-## Overview
-- **Purpose-built for safety:** TCP connect probing, HTTP/TLS metadata, and consent manifest tracking keep operations auditable.
-- **Multiple delivery modes:** Launch via CLI, Flask web UI, or Docker for quick demos and workshops.
-- **Reporting your way:** Export HTML dashboards, JSON artifacts, Markdown briefs, or PDFs for stakeholders.
-- **Ethical guardrails:** Development keys and manifests make it clear what to replace before any production use.
-
----
-
-## Quickstart
 ```bash
-git clone https://github.com/YOUR_GITHUB_USERNAME/ReconScript.git
-cd ReconScript
-./start.sh
-```
-Then open <http://127.0.0.1:5000> in your browser.
-
-**Windows:** run `start.bat`.  
-**Docker:** `docker compose up` or build the image (`docker build -t reconscript .`) and run it with a mounted `results/` volume.
-
----
-
-## Usage
-### Web UI
-1. Enter the approved hostname or IP.
-2. Optionally adjust port selections and output format.
-3. Launch the scan and track progress live.
-4. Retrieve generated reports from the UI or the `results/` directory.
-
-### CLI
-```bash
-python -m reconscript --target 127.0.0.1 --ports 80 443 --format html
-```
-Reports are timestamped within `results/<scan-id>/` and may include signatures when enabled.
-
----
-
-## Repository Map
-```
-├─ reconscript/          # Core scanners, report builders, and Flask application
-├─ templates/            # HTML and Markdown templates
-├─ scripts/              # Developer utilities (key manifests, helpers)
-├─ tests/                # Pytest suites
-├─ results/              # Generated reports (gitignored)
-└─ docs/                 # Help, changelog, roadmap, and security notes
+python -m venv .venv
+source .venv/bin/activate  # On Windows use: .venv\\Scripts\\activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 ```
 
-Key entry points:
-- `start.py` orchestrates environment detection and launches the UI.
-- `install_dependencies.py` ensures required packages are installed.
-- `docker-compose.yml` runs the full stack with persistent report storage.
+For contributors, install the optional tooling as well:
 
----
-
-## Tooling & Automation
-- `requirements.txt` — runtime dependencies.
-- `requirements-dev.txt` — local development helpers.
-- `.github/workflows/ci.yml` — existing test and build automation.
-- `.github/workflows/lint.yml` — optional formatting and static analysis reminders.
-
-Run these commands locally when contributing:
 ```bash
 python -m pip install -r requirements-dev.txt
-black .
-flake8
+```
+
+## Quick Start
+### Launch the Web UI
+```bash
+python start.py
+```
+The launcher checks dependencies, loads environment variables from `.env` if present, and starts the Flask server on <http://127.0.0.1:5000>. Use `start.sh`, `start.bat`, or `start.ps1` for platform-specific wrappers.
+
+### Run a CLI Scan
+```bash
+python -m reconscript --target 203.0.113.10 --ports 80 443 --format html
+```
+Outputs are timestamped under `results/<scan-id>/` and include hashes to support tamper review.
+
+### Docker Usage
+A Docker Compose definition is provided for isolated demonstrations:
+
+```bash
+docker compose up --build
+```
+
+Mount the `results/` directory when running containers so generated artefacts persist outside the container lifecycle.
+
+## Validation and Quality Checks
+The project includes automation scripts and workflows to keep contributions consistent:
+
+```bash
+python -m pip install -r requirements-dev.txt
+black --check .
+ruff check .
 bandit -r reconscript
+pip-audit --requirement requirements.txt
 pytest
 ```
 
----
+The `.github/workflows/lint.yml` pipeline mirrors these steps and is configured to surface security findings without blocking the build unless a critical error occurs.
 
-## Documentation Hub
-- [docs/HELP.md](docs/HELP.md) — quick setup, troubleshooting, and commands.
-- [docs/CLI_REFERENCE.md](docs/CLI_REFERENCE.md) — deep-dive flags and output formats for the CLI.
-- [docs/CHANGELOG.md](docs/CHANGELOG.md) — historical highlights.
-- [docs/SECURITY.md](docs/SECURITY.md) — usage guardrails and disclosure guidance.
-- [ROADMAP.md](ROADMAP.md) — upcoming enhancements and audit observations.
+## Troubleshooting
+- **Missing system packages:** PDF export requires additional system libraries; review `docs/HELP.md` before enabling that pathway.
+- **Permissions errors:** Ensure write access to the `results/` directory; it stores generated artefacts and logs.
+- **Environment variables:** Copy `.env.example` to `.env` to configure default targets, API keys, or Flask secrets in a local-only context.
+- **Docker networking:** When running inside Docker, provide the `SCAN_TARGET` environment variable to avoid host-only lookups.
 
----
+## Support and Contributions
+Bug reports and feature ideas are welcome via GitHub issues. Follow the guidelines in `CONTRIBUTING.md` and run the validation commands listed above before opening a pull request.
 
-## Safety & Consent
-ReconScript is for educational labs and explicit engagements only. Replace development keys in `keys/`, review manifests before scans, and never probe systems without written authorization. Reports include hashes and optional signatures for accountability.
+## License and Credits
+ReconScript is released under the MIT License. See the [`LICENSE`](LICENSE) file for full terms.
 
----
-
-## Contributing
-1. Fork the repository and create a feature branch.
-2. Follow PEP 8; run Black, Flake8, Bandit, and pytest before opening a PR.
-3. Document new behaviors in the README and docs as needed.
-4. Submit a pull request summarizing validation steps and scope approvals.
-
----
-
-## License
-Released under the MIT License. See `LICENSE` for details.
-
----
-
-## Author
-**Daniel Madden**  
-IT Professional | Technology Enthusiast | Builder of Experiments  
-“Not a software engineer — just a guy who loves all things tech.”
+**Author: Daniel Madden**
