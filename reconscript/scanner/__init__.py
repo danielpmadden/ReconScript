@@ -9,10 +9,10 @@ import random
 import socket
 import ssl
 import time
+from collections.abc import Iterable, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from http.cookies import SimpleCookie, CookieError
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from http.cookies import CookieError, SimpleCookie
 
 import requests
 from requests import Response
@@ -22,9 +22,10 @@ from .throttle import TokenBucket
 
 LOGGER = logging.getLogger(__name__)
 
-DEFAULT_PORTS: Tuple[int, ...] = (80, 443, 8080, 8443, 8000, 3000)
-HTTP_PORTS: Tuple[int, ...] = DEFAULT_PORTS
+DEFAULT_PORTS: tuple[int, ...] = (80, 443, 8080, 8443, 8000, 3000)
+HTTP_PORTS: tuple[int, ...] = DEFAULT_PORTS
 USER_AGENT = "ReconScript/secure"
+RANDOM = random.SystemRandom()
 
 TOKEN_RATE = float(os.environ.get("TOKEN_RATE", "5"))
 TOKEN_CAPACITY = float(os.environ.get("TOKEN_CAPACITY", "10"))
@@ -52,7 +53,7 @@ REDACTION_KEYS = DEFAULT_REDACTIONS | _env_redactions
 @dataclass(frozen=True)
 class ScanConfig:
     target: str
-    hostname: Optional[str]
+    hostname: str | None
     ports: Sequence[int]
     enable_ipv6: bool
     evidence_level: str
@@ -63,8 +64,8 @@ class ScanConfig:
     max_retries: int = MAX_HTTP_RETRIES
 
 
-def validate_port_list(ports: Iterable[int]) -> Tuple[int, ...]:
-    validated: List[int] = []
+def validate_port_list(ports: Iterable[int]) -> tuple[int, ...]:
+    validated: list[int] = []
     for port in ports:
         if not isinstance(port, int):
             raise TypeError("Ports must be integers.")
@@ -75,7 +76,9 @@ def validate_port_list(ports: Iterable[int]) -> Tuple[int, ...]:
     return tuple(validated)
 
 
-def resolve_addresses(target: str, enable_ipv6: bool) -> List[Tuple[int, int, int, str, Tuple[str, int]]]:
+def resolve_addresses(
+    target: str, enable_ipv6: bool
+) -> list[tuple[int, int, int, str, tuple[str, int]]]:
     family = socket.AF_UNSPEC if enable_ipv6 else socket.AF_INET
     try:
         infos = socket.getaddrinfo(target, None, family=family, type=socket.SOCK_STREAM)
@@ -93,17 +96,19 @@ def resolve_addresses(target: str, enable_ipv6: bool) -> List[Tuple[int, int, in
     return unique
 
 
-def tcp_connect_scan(config: ScanConfig, bucket: TokenBucket) -> List[int]:
+def tcp_connect_scan(config: ScanConfig, bucket: TokenBucket) -> list[int]:
     LOGGER.info("Commencing TCP connect scan with token bucket rate limiting.")
     addresses = resolve_addresses(config.target, config.enable_ipv6)
-    open_ports: List[int] = []
+    open_ports: list[int] = []
     for port in config.ports:
         bucket.consume()
         success = False
-        for family, _, _, _, sockaddr in addresses:
+        for _family, _, _, _, sockaddr in addresses:
             host = sockaddr[0]
             try:
-                with socket.create_connection((host, port), timeout=config.connect_timeout):
+                with socket.create_connection(
+                    (host, port), timeout=config.connect_timeout
+                ):
                     success = True
                     break
             except (socket.timeout, ConnectionRefusedError, OSError) as exc:
@@ -121,19 +126,23 @@ def _build_url(hostname: str, port: int) -> str:
     return f"{scheme}://{hostname}:{port}"
 
 
-def _redact_headers(headers: Dict[str, str], redaction_keys: set[str]) -> Dict[str, str]:
-    sanitized: Dict[str, str] = {}
+def _redact_headers(
+    headers: dict[str, str], redaction_keys: set[str]
+) -> dict[str, str]:
+    sanitized: dict[str, str] = {}
     for key, value in headers.items():
         lower = key.lower()
         redact = lower in redaction_keys
-        if lower.startswith("x-") and any(token in lower for token in ("auth", "token", "key")):
+        if lower.startswith("x-") and any(
+            token in lower for token in ("auth", "token", "key")
+        ):
             redact = True
         sanitized[key] = "[redacted]" if redact else value
     return sanitized
 
 
-def _parse_cookie_flags(response: Response) -> Optional[Dict[str, bool]]:
-    header_values: List[str] = []
+def _parse_cookie_flags(response: Response) -> dict[str, bool] | None:
+    header_values: list[str] = []
     if hasattr(response.raw, "headers"):
         raw_headers = response.raw.headers
         if hasattr(raw_headers, "getlist"):
@@ -164,7 +173,7 @@ def _parse_cookie_flags(response: Response) -> Optional[Dict[str, bool]]:
     return {"secure": secure_flag, "httponly": httponly_flag}
 
 
-def check_security_headers(headers: Dict[str, str]) -> Dict[str, object]:
+def check_security_headers(headers: dict[str, str]) -> dict[str, object]:
     required_headers = {
         "Strict-Transport-Security": "HSTS",
         "Content-Security-Policy": "CSP",
@@ -175,8 +184,8 @@ def check_security_headers(headers: Dict[str, str]) -> Dict[str, object]:
         "X-XSS-Protection": "Legacy XSS filter",
     }
 
-    present: Dict[str, str] = {}
-    missing: List[str] = []
+    present: dict[str, str] = {}
+    missing: list[str] = []
     header_keys = {key.lower(): key for key in headers.keys()}
     for header in required_headers:
         lowered = header.lower()
@@ -187,7 +196,7 @@ def check_security_headers(headers: Dict[str, str]) -> Dict[str, object]:
     return {"present": present, "missing": missing}
 
 
-def _detect_external_redirect(expected_host: str, response: Response) -> Optional[str]:
+def _detect_external_redirect(expected_host: str, response: Response) -> str | None:
     expected = expected_host.lower()
     for hop in (*response.history, response):
         parsed = requests.utils.urlparse(hop.url)
@@ -197,7 +206,9 @@ def _detect_external_redirect(expected_host: str, response: Response) -> Optiona
     return None
 
 
-def _http_request(url: str, max_retries: int, connect_timeout: float, read_timeout: float) -> Tuple[Optional[Response], Optional[str]]:
+def _http_request(
+    url: str, max_retries: int, connect_timeout: float, read_timeout: float
+) -> tuple[Response | None, str | None]:
     headers = {"User-Agent": USER_AGENT}
     attempt = 0
     while attempt <= max_retries:
@@ -212,8 +223,8 @@ def _http_request(url: str, max_retries: int, connect_timeout: float, read_timeo
         except requests_exceptions.RequestException as exc:
             if attempt >= max_retries:
                 return None, str(exc)
-            sleep = min(4.0, (2 ** attempt) * 0.5)
-            jitter = random.uniform(0, 0.25)
+            sleep = min(4.0, (2**attempt) * 0.5)
+            jitter = RANDOM.uniform(0, 0.25)
             time.sleep(sleep + jitter)
             attempt += 1
     return None, "unreachable"
@@ -223,9 +234,11 @@ def _http_probe_single(
     config: ScanConfig,
     hostname: str,
     port: int,
-) -> Dict[str, object]:
+) -> dict[str, object]:
     url = _build_url(hostname, port)
-    response, error = _http_request(url, config.max_retries, config.connect_timeout, config.read_timeout)
+    response, error = _http_request(
+        url, config.max_retries, config.connect_timeout, config.read_timeout
+    )
     if error:
         LOGGER.debug("HTTP probe for %s failed: %s", url, error)
         return {"error": error}
@@ -239,7 +252,7 @@ def _http_probe_single(
 
     headers = dict(response.headers)
     sanitized_headers = _redact_headers(headers, config.redaction_keys)
-    metadata: Dict[str, object] = {
+    metadata: dict[str, object] = {
         "url": response.url,
         "status_code": response.status_code,
         "headers": sanitized_headers,
@@ -260,7 +273,11 @@ def _http_probe_single(
     metadata["raw_request"] = {
         "method": request_info.method,
         "headers": dict(request_info.headers),
-        "body": request_info.body.decode("utf-8", errors="replace") if isinstance(request_info.body, bytes) else request_info.body,
+        "body": (
+            request_info.body.decode("utf-8", errors="replace")
+            if isinstance(request_info.body, bytes)
+            else request_info.body
+        ),
     }
     metadata["raw_response"] = {
         "status_code": response.status_code,
@@ -270,39 +287,54 @@ def _http_probe_single(
     return metadata
 
 
-def http_probe_services(config: ScanConfig, hostname: str, ports: Sequence[int]) -> Dict[int, Dict[str, object]]:
-    results: Dict[int, Dict[str, object]] = {}
+def http_probe_services(
+    config: ScanConfig, hostname: str, ports: Sequence[int]
+) -> dict[int, dict[str, object]]:
+    results: dict[int, dict[str, object]] = {}
     http_ports = list(ports)
     if not http_ports:
         return results
 
     with ThreadPoolExecutor(max_workers=config.http_workers) as executor:
-        future_map = {executor.submit(_http_probe_single, config, hostname, port): port for port in http_ports}
+        future_map = {
+            executor.submit(_http_probe_single, config, hostname, port): port
+            for port in http_ports
+        }
         for future in as_completed(future_map):
             port = future_map[future]
             try:
                 results[port] = future.result()
             except Exception as exc:  # pragma: no cover - defensive guard
-                LOGGER.error("HTTP probe for port %s raised unexpected error: %s", port, exc)
+                LOGGER.error(
+                    "HTTP probe for port %s raised unexpected error: %s", port, exc
+                )
                 results[port] = {"error": str(exc)}
     return results
 
 
-def fetch_tls_certificate(config: ScanConfig, port: int) -> Dict[str, object]:
+def fetch_tls_certificate(config: ScanConfig, port: int) -> dict[str, object]:
     context = ssl.create_default_context()
     context.check_hostname = False
     addresses = resolve_addresses(config.target, config.enable_ipv6)
-    for family, _, _, _, sockaddr in addresses:
+    for _family, _, _, _, sockaddr in addresses:
         host = sockaddr[0]
         try:
-            with socket.create_connection((host, port), timeout=config.connect_timeout) as sock:
-                with context.wrap_socket(sock, server_hostname=config.hostname or config.target) as wrapped:
+            with socket.create_connection(
+                (host, port), timeout=config.connect_timeout
+            ) as sock:
+                with context.wrap_socket(
+                    sock, server_hostname=config.hostname or config.target
+                ) as wrapped:
                     certificate = wrapped.getpeercert()
                     if not certificate:
                         continue
                     return {
-                        "subject": dict(entry[0] for entry in certificate.get("subject", [])),
-                        "issuer": dict(entry[0] for entry in certificate.get("issuer", [])),
+                        "subject": dict(
+                            entry[0] for entry in certificate.get("subject", [])
+                        ),
+                        "issuer": dict(
+                            entry[0] for entry in certificate.get("issuer", [])
+                        ),
                         "notBefore": certificate.get("notBefore"),
                         "notAfter": certificate.get("notAfter"),
                         "serialNumber": certificate.get("serialNumber"),
@@ -313,10 +345,12 @@ def fetch_tls_certificate(config: ScanConfig, port: int) -> Dict[str, object]:
     return {"error": "unable to retrieve TLS certificate"}
 
 
-def fetch_robots(config: ScanConfig, hostname: str) -> Dict[str, object]:
+def fetch_robots(config: ScanConfig, hostname: str) -> dict[str, object]:
     for scheme in ("https", "http"):
         url = f"{scheme}://{hostname}/robots.txt"
-        response, error = _http_request(url, config.max_retries, config.connect_timeout, config.read_timeout)
+        response, error = _http_request(
+            url, config.max_retries, config.connect_timeout, config.read_timeout
+        )
         if error:
             continue
         assert response is not None
@@ -324,31 +358,47 @@ def fetch_robots(config: ScanConfig, hostname: str) -> Dict[str, object]:
         if redirect:
             continue
         if response.status_code == 200 and response.text.strip():
-            body = response.text if config.evidence_level == "high" else response.text[:2000]
+            body = (
+                response.text
+                if config.evidence_level == "high"
+                else response.text[:2000]
+            )
             return {"url": response.url, "body": body}
     return {"note": "robots.txt not present or inaccessible"}
 
 
-def generate_findings(http_results: Dict[int, Dict[str, object]]) -> List[Dict[str, object]]:
-    findings: List[Dict[str, object]] = []
+def generate_findings(
+    http_results: dict[int, dict[str, object]],
+) -> list[dict[str, object]]:
+    findings: list[dict[str, object]] = []
     for port, result in http_results.items():
         headers = result.get("security_headers_check")
         if isinstance(headers, dict):
             missing = headers.get("missing", [])
             if missing:
-                findings.append({"port": port, "issue": "missing_security_headers", "details": missing})
+                findings.append(
+                    {
+                        "port": port,
+                        "issue": "missing_security_headers",
+                        "details": missing,
+                    }
+                )
         cookie_flags = result.get("cookie_flags")
         if isinstance(cookie_flags, dict) and (
             not cookie_flags.get("secure") or not cookie_flags.get("httponly")
         ):
-            findings.append({"port": port, "issue": "session_cookie_flags", "details": cookie_flags})
+            findings.append(
+                {"port": port, "issue": "session_cookie_flags", "details": cookie_flags}
+            )
         status_code = result.get("status_code")
         if isinstance(status_code, int) and status_code >= 500:
-            findings.append({"port": port, "issue": "server_error", "details": status_code})
+            findings.append(
+                {"port": port, "issue": "server_error", "details": status_code}
+            )
     return findings
 
 
-def serialize_results(data: Dict[str, object]) -> str:
+def serialize_results(data: dict[str, object]) -> str:
     return json.dumps(data, indent=2, sort_keys=True)
 
 
@@ -373,5 +423,3 @@ __all__ = [
     "check_security_headers",
     "serialize_results",
 ]
-
-
