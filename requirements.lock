@@ -1,9 +1,10 @@
-# Generated manually to provide deterministic installs for production builds.
-requests==2.31.0
-rich==13.7.0
-weasyprint==61.2
+# Locked runtime dependencies generated from requirements.txt
+Flask==3.0.3
+Flask-Login==0.6.3
+Jinja2==3.1.4
+requests==2.32.3
+urllib3==2.2.3
+python-dotenv==1.0.1
+rich==13.7.1
+PyNaCl==1.5.0
 prometheus-client==0.20.0
-# Development extras
-pytest==7.4.4
-responses==0.25.0
-flake8==6.1.0

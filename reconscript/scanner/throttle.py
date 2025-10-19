@@ -59,5 +59,3 @@ class TokenBucket:
         with self._lock:
             self._refill()
             return self._tokens
-
-

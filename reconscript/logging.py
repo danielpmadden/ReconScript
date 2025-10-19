@@ -5,9 +5,9 @@ from __future__ import annotations
 import json
 import logging
 import os
+from collections.abc import Iterable
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import Iterable, Optional
 
 DEFAULT_MAX_BYTES = int(os.environ.get("LOG_MAX_BYTES", str(10 * 1024 * 1024)))
 DEFAULT_BACKUP_COUNT = int(os.environ.get("LOG_BACKUP_COUNT", "5"))
@@ -18,7 +18,9 @@ SENSITIVE_HEADERS = {"cookie", "set-cookie", "authorization", "proxy-authorizati
 class JsonFormatter(logging.Formatter):
     """Emit logs as structured JSON objects."""
 
-    def format(self, record: logging.LogRecord) -> str:  # pragma: no cover - straightforward structure
+    def format(
+        self, record: logging.LogRecord
+    ) -> str:  # pragma: no cover - straightforward structure
         payload = {
             "level": record.levelname,
             "message": record.getMessage(),
@@ -33,7 +35,9 @@ class JsonFormatter(logging.Formatter):
 class SensitiveDataFilter(logging.Filter):
     """Redact sensitive header values in structured arguments."""
 
-    def filter(self, record: logging.LogRecord) -> bool:  # pragma: no cover - deterministic behaviour
+    def filter(
+        self, record: logging.LogRecord
+    ) -> bool:  # pragma: no cover - deterministic behaviour
         if isinstance(record.args, dict):
             sanitized = {}
             for key, value in record.args.items():
@@ -66,8 +70,8 @@ def configure_logging(
     level: int = logging.INFO,
     *,
     json_logs: bool = False,
-    logfile: Optional[Path | str] = None,
-    suppress: Optional[Iterable[str]] = None,
+    logfile: Path | str | None = None,
+    suppress: Iterable[str] | None = None,
 ) -> None:
     """Configure root logging with rotation and optional JSON output."""
 
@@ -90,12 +94,12 @@ def configure_logging(
         if json_logs:
             file_handler.setFormatter(JsonFormatter())
         else:
-            file_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+            file_handler.setFormatter(
+                logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+            )
         handlers.append(file_handler)
 
     logging.basicConfig(level=level, handlers=handlers, force=True)
 
     for name in suppress or ("werkzeug", "urllib3", "PIL"):
         logging.getLogger(name).setLevel(max(level, logging.WARNING))
-
-
