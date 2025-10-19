@@ -237,11 +237,17 @@ def main() -> None:
         )
 
     python_executable = Path(sys.executable)
-    try:
-        install_dependencies(python_executable, console=console)
-    except RuntimeError as exc:
-        console.print(f"[red]{exc}[/red]")
-        sys.exit(1)
+    bootstrap_requested = os.environ.get("RECONSCRIPT_BOOTSTRAP", "").lower() in {"1", "true", "yes"}
+    if bootstrap_requested:
+        try:
+            install_dependencies(python_executable, console=console)
+        except RuntimeError as exc:
+            console.print(f"[red]{exc}[/red]")
+            sys.exit(1)
+    else:
+        console.print(
+            "Skipping dependency bootstrap; set RECONSCRIPT_BOOTSTRAP=1 to auto-install requirements."
+        )
 
     # ✅ Reinitialize Rich console after dependencies are ensured
     console = create_console()

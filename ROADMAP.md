@@ -5,6 +5,9 @@
 - [x] Consolidate GitHub Actions into a cached matrix workflow covering Ruff, Black, and pytest.
 - [x] Repair Markdown exporter fallback logic and add regression coverage for CLI reporting.
 - [ ] Publish an onboarding checklist that walks operators through secret provisioning and CI expectations.
+- [x] Remove vendored protocol shims in favour of upstream `requests` and `PyNaCl` packages.
+- [ ] Enforce automated secret scanning (detect-secrets + trufflehog) in CI pipelines.
+- [ ] Keep end-to-end coverage reports at or above 85% with explicit gating in CI.
 
 ## 60-Day Objectives
 - [ ] Automate signing-key rotation with documentation for Vault/Secrets Manager integrations.

@@ -18,23 +18,15 @@ MARKER_FALLBACK = ROOT / ".requirements-hash"
 
 # Mapping of requirement name to import name so we can detect missing modules quickly.
 REQUIREMENT_IMPORTS: Dict[str, str] = {
+    "flask": "flask",
+    "flask-login": "flask_login",
+    "jinja2": "jinja2",
     "requests": "requests",
     "urllib3": "urllib3",
-    "jinja2": "jinja2",
-    "flask": "flask",
-    "rich": "rich",
-    "tabulate": "tabulate",
-    "colorama": "colorama",
-    "weasyprint": "weasyprint",
-    "fonttools": "fontTools",
-    "tinycss2": "tinycss2",
-    "cssselect2": "cssselect2",
-    "pyphen": "pyphen",
-    "pydyf": "pydyf",
-    "markupsafe": "markupsafe",
-    "itsdangerous": "itsdangerous",
-    "werkzeug": "werkzeug",
     "python-dotenv": "dotenv",
+    "rich": "rich",
+    "prometheus-client": "prometheus_client",
+    "pynacl": "nacl",
 }
 
 
