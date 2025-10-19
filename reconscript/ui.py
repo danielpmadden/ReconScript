@@ -1,4 +1,4 @@
-"""Flask UI for ReconScript with consent enforcement and RBAC."""
+"""Web UI for ReconScript."""
 
 from __future__ import annotations
 
@@ -8,16 +8,15 @@ import os
 import uuid
 from functools import wraps
 from pathlib import Path
-from typing import Optional
 
 from flask import (
     Flask,
+    Response,
     abort,
-    flash,
     current_app,
+    flash,
     redirect,
     render_template,
-    Response,
     request,
     send_from_directory,
     url_for,
@@ -48,7 +47,6 @@ class StaticUser(UserMixin):
         self.role = role
 
 
-<<<<<<< HEAD
 def _allow_dev_secrets() -> bool:
     return os.environ.get("ALLOW_DEV_SECRETS", "false").lower() == "true"
 
@@ -56,22 +54,18 @@ def _allow_dev_secrets() -> bool:
 def _enforce_secret_path(path: Path, *, env_var: str) -> Path:
     resolved = path.expanduser().resolve()
     if not resolved.exists():
-        raise RuntimeError(f"{env_var} must point to an existing file (got {resolved}).")
-=======
-def _load_secret_key() -> bytes:
-    secret_path = Path(
-        os.environ.get("FLASK_SECRET_KEY_FILE", "keys/dev_flask_secret.key")
-    )
->>>>>>> 74be2f0 (style: fix reporters.py syntax and apply Black formatting)
-    try:
-        if DEV_KEYS_DIR in resolved.parents and not _allow_dev_secrets():
-            raise RuntimeError(
-                f"{env_var} refers to a developer sample key. Provide deployment-specific secrets or set ALLOW_DEV_SECRETS=true for local testing."
-            )
-    except RuntimeError:
-        raise
-    except Exception:
-        pass
+        raise RuntimeError(
+            f"{env_var} must point to an existing file (got {resolved})."
+        )
+    if DEV_KEYS_DIR in resolved.parents and not _allow_dev_secrets():
+        LOGGER.warning(
+            "Rejected developer key reference for %s due to ALLOW_DEV_SECRETS=false.",
+            env_var,
+        )
+        raise RuntimeError(
+            f"{env_var} refers to a developer sample key. Provide deployment-specific "
+            "secrets or set ALLOW_DEV_SECRETS=true for local testing."
+        )
     return resolved
 
 
@@ -81,20 +75,19 @@ def _load_secret_key() -> bytes:
         raise RuntimeError(
             "FLASK_SECRET_KEY_FILE environment variable must reference a secure secret key file."
         )
-    secret_path = _enforce_secret_path(Path(secret_env), env_var="FLASK_SECRET_KEY_FILE")
+    secret_path = _enforce_secret_path(
+        Path(secret_env), env_var="FLASK_SECRET_KEY_FILE"
+    )
     try:
         secret = secret_path.read_bytes().strip()
     except OSError as exc:
-<<<<<<< HEAD
-        raise RuntimeError(f"Unable to read Flask secret key from {secret_path}: {exc}") from exc
-    if not secret:
-        raise RuntimeError(f"Secret key file {secret_path} is empty.")
-    return secret
-=======
+        LOGGER.exception("Failed to read Flask secret key from %s", secret_path)
         raise RuntimeError(
             f"Unable to read Flask secret key from {secret_path}: {exc}"
         ) from exc
->>>>>>> 74be2f0 (style: fix reporters.py syntax and apply Black formatting)
+    if not secret:
+        raise RuntimeError(f"Secret key file {secret_path} is empty.")
+    return secret
 
 
 def _rbac_required(role: str):
@@ -119,9 +112,16 @@ def _load_user_credentials() -> tuple[str, str]:
     username = os.environ.get("ADMIN_USER", "").strip()
     password = os.environ.get("ADMIN_PASSWORD", "").strip()
     if not username or not password:
-        raise RuntimeError("ADMIN_USER and ADMIN_PASSWORD must be set for the ReconScript UI.")
-    if not _allow_dev_secrets() and (username == "admin" or password == "changeme"):
-        raise RuntimeError("Default credentials are not permitted. Set strong ADMIN_USER and ADMIN_PASSWORD values.")
+        raise RuntimeError(
+            "ADMIN_USER and ADMIN_PASSWORD must be set for the ReconScript UI."
+        )
+    if not _allow_dev_secrets() and (
+        username == "admin" or password == "changeme"  # noqa: S105
+    ):
+        raise RuntimeError(
+            "Default credentials are not permitted. Set strong ADMIN_USER and "
+            "ADMIN_PASSWORD values."
+        )
     if len(password) < 12 and not _allow_dev_secrets():
         raise RuntimeError("ADMIN_PASSWORD must be at least 12 characters long.")
     return username, password
@@ -161,7 +161,7 @@ def create_app() -> Flask:
     @login_manager.user_loader
     def load_user(
         user_id: str,
-    ) -> Optional[StaticUser]:  # pragma: no cover - simple lookup
+    ) -> StaticUser | None:  # pragma: no cover - simple lookup
         if user_id == user.id:
             return user
         return None
@@ -191,7 +191,12 @@ def create_app() -> Flask:
             submitted_pass = request.form.get("password", "")
             LOGGER.info(
                 "ui.login.attempt",
-                extra={"event": "ui.login.attempt", "username": submitted_user, "success": submitted_user == username and submitted_pass == password},
+                extra={
+                    "event": "ui.login.attempt",
+                    "username": submitted_user,
+                    "success": submitted_user == username
+                    and submitted_pass == password,
+                },
             )
             if submitted_user == username and submitted_pass == password:
                 login_user(user)
@@ -204,7 +209,7 @@ def create_app() -> Flask:
         logout_user()
         return redirect(url_for("login"))
 
-    def _handle_manifest() -> tuple[Optional[Path], Optional[object]]:
+    def _handle_manifest() -> tuple[Path | None, object | None]:
         file = request.files.get("consent_file")
         if not file or not file.filename:
             return None, None
@@ -230,11 +235,11 @@ def create_app() -> Flask:
             )
             try:
                 validate_target(target, expected_ip=expected_ip)
-            except Exception as exc:
+            except Exception as exc:  # pragma: no cover - defensive
                 flash(str(exc), "error")
                 return render_template("index.html")
 
-            consent_path: Optional[Path] = None
+            consent_path: Path | None = None
             consent_manifest = None
             try:
                 consent_path, consent_manifest = _handle_manifest()
@@ -242,7 +247,14 @@ def create_app() -> Flask:
                 flash(f"Consent manifest invalid: {exc}", "error")
                 if consent_path:
                     consent_path.unlink(missing_ok=True)
-                LOGGER.warning("ui.consent.invalid", extra={"event": "ui.consent.invalid", "target": target, "error": str(exc)})
+                LOGGER.warning(
+                    "ui.consent.invalid",
+                    extra={
+                        "event": "ui.consent.invalid",
+                        "target": target,
+                        "error": str(exc),
+                    },
+                )
                 return render_template("index.html")
 
             try:
@@ -269,7 +281,14 @@ def create_app() -> Flask:
                 flash(str(exc), "error")
                 if consent_path:
                     consent_path.unlink(missing_ok=True)
-                LOGGER.error("ui.scan.failed", extra={"event": "ui.scan.failed", "target": target, "error": str(exc)})
+                LOGGER.error(
+                    "ui.scan.failed",
+                    extra={
+                        "event": "ui.scan.failed",
+                        "target": target,
+                        "error": str(exc),
+                    },
+                )
                 return render_template("index.html")
 
             persisted = persist_report(report, consent_source=consent_path, sign=False)
@@ -311,7 +330,7 @@ def create_app() -> Flask:
 
 def main() -> None:
     app = create_app()
-    host = "0.0.0.0" if app.config["PUBLIC_UI"] else "127.0.0.1"
+    host = "0.0.0.0" if app.config["PUBLIC_UI"] else "127.0.0.1"  # noqa: S104
     port = int(os.environ.get("DEFAULT_PORT", "5000"))
     LOGGER.warning(
         "UI running with RBAC %s",

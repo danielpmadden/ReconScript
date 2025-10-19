@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 
 """Helper script to ensure ReconScript runtime dependencies are installed."""
+
+from __future__ import annotations
 
 import argparse
 import hashlib
 import importlib
+import logging
 import subprocess
 import sys
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Dict, Iterable
 
 ROOT = Path(__file__).resolve().parent
 REQUIREMENTS_FILE = ROOT / "requirements.txt"
@@ -17,7 +19,8 @@ MARKER_IN_VENV = ROOT / ".venv" / ".requirements-hash"
 MARKER_FALLBACK = ROOT / ".requirements-hash"
 
 # Mapping of requirement name to import name so we can detect missing modules quickly.
-REQUIREMENT_IMPORTS: Dict[str, str] = {
+LOGGER = logging.getLogger(__name__)
+REQUIREMENT_IMPORTS: dict[str, str] = {
     "requests": "requests",
     "urllib3": "urllib3",
     "jinja2": "jinja2",
@@ -46,6 +49,7 @@ def create_console():  # type: ignore[return-value]
 
         return Console(highlight=False)
     except Exception:
+        LOGGER.exception("Rich console unavailable; falling back to plain console.")
 
         class _PlainConsole:
             def print(self, *values: object, sep: str = " ", end: str = "\n") -> None:
@@ -73,11 +77,12 @@ def _marker_path() -> Path:
     return MARKER_FALLBACK
 
 
-def _missing_modules(modules: Dict[str, str]) -> Iterable[str]:
+def _missing_modules(modules: dict[str, str]) -> Iterable[str]:
     for requirement, module_name in modules.items():
         try:
             importlib.import_module(module_name)
         except Exception:
+            LOGGER.exception("Failed to import module '%s'", module_name)
             yield requirement
 
 
@@ -123,7 +128,7 @@ def install_dependencies(
             str(requirements),
         ]
         output.print("Resolving Python requirements (this may take a moment)…")
-        result = subprocess.run(command, capture_output=True, text=True)
+        result = subprocess.run(command, capture_output=True, text=True)  # noqa: S603
         if result.returncode != 0:
             combined_output = "\n".join(
                 part for part in (result.stdout, result.stderr) if part
@@ -172,7 +177,7 @@ def main(argv: Iterable[str] | None = None) -> None:
         )
     except Exception as exc:  # pragma: no cover - invoked from CLI
         console.print(f"[red]Failed to install dependencies: {exc}[/red]")
-        raise SystemExit(1)
+        raise SystemExit(1) from exc
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entrypoint

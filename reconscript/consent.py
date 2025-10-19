@@ -4,26 +4,20 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 from nacl import exceptions as nacl_exceptions
 from nacl.signing import SigningKey, VerifyKey
 
 SCHEMA_PATH = Path(__file__).resolve().parent / "schemas" / "scope_manifest.v1.json"
-<<<<<<< HEAD
 DEV_KEYS_DIR = Path(__file__).resolve().parents[1] / "keys"
-=======
-DEFAULT_PUBLIC_KEY = Path(
-    os.environ.get("CONSENT_PUBLIC_KEY_PATH", "keys/dev_ed25519.pub")
-)
-DEFAULT_PRIVATE_KEY = Path(
-    os.environ.get("REPORT_SIGNING_KEY_PATH", "keys/dev_ed25519.priv")
-)
->>>>>>> 74be2f0 (style: fix reporters.py syntax and apply Black formatting)
+
+LOGGER = logging.getLogger(__name__)
 
 
 class ConsentError(ValueError):
@@ -70,7 +64,7 @@ def _parse_iso8601(value: str) -> datetime:
     return parsed.astimezone(timezone.utc)
 
 
-def _canonical_json(data: Dict[str, Any]) -> bytes:
+def _canonical_json(data: dict[str, Any]) -> bytes:
     return json.dumps(data, separators=(",", ":"), sort_keys=True).encode("utf-8")
 
 
@@ -81,16 +75,18 @@ def _allow_dev_secrets() -> bool:
 def _guard_key_path(path: Path, *, env_var: str) -> Path:
     resolved = path.expanduser().resolve()
     if not resolved.exists():
-        raise ConsentError(f"{env_var} must point to an existing file (got {resolved}).")
-    try:
-        if DEV_KEYS_DIR in resolved.parents and not _allow_dev_secrets():
-            raise ConsentError(
-                f"{env_var} references developer sample keys. Provide production keys or set ALLOW_DEV_SECRETS=true for local testing."
-            )
-    except ConsentError:
-        raise
-    except Exception:
-        pass
+        raise ConsentError(
+            f"{env_var} must point to an existing file (got {resolved})."
+        )
+    if DEV_KEYS_DIR in resolved.parents and not _allow_dev_secrets():
+        LOGGER.warning(
+            "Rejected developer key reference for %s due to ALLOW_DEV_SECRETS=false.",
+            env_var,
+        )
+        raise ConsentError(
+            f"{env_var} references developer sample keys. Provide production keys "
+            "or set ALLOW_DEV_SECRETS=true for local testing."
+        )
     return resolved
 
 
@@ -112,12 +108,14 @@ def _load_private_key(path: Path) -> SigningKey:
     return SigningKey(raw)
 
 
-def _resolve_key_path(provided: Optional[Path], env_var: str) -> Path:
+def _resolve_key_path(provided: Path | None, env_var: str) -> Path:
     if provided is not None:
         return _guard_key_path(provided, env_var=env_var)
     env_value = os.environ.get(env_var)
     if not env_value:
-        raise ConsentError(f"{env_var} must be set to the path of the authorised signing key.")
+        raise ConsentError(
+            f"{env_var} must be set to the path of the authorised signing key."
+        )
     return _guard_key_path(Path(env_value), env_var=env_var)
 
 
@@ -169,15 +167,10 @@ def load_manifest(path: Path | str) -> ConsentManifest:
     return manifest
 
 
-<<<<<<< HEAD
-def validate_manifest(manifest: ConsentManifest, *, public_key_path: Optional[Path] = None) -> ConsentValidationResult:
-    key_path = _resolve_key_path(public_key_path, "CONSENT_PUBLIC_KEY_PATH")
-=======
 def validate_manifest(
-    manifest: ConsentManifest, *, public_key_path: Optional[Path] = None
+    manifest: ConsentManifest, *, public_key_path: Path | None = None
 ) -> ConsentValidationResult:
-    key_path = public_key_path or DEFAULT_PUBLIC_KEY
->>>>>>> 74be2f0 (style: fix reporters.py syntax and apply Black formatting)
+    key_path = _resolve_key_path(public_key_path, "CONSENT_PUBLIC_KEY_PATH")
     verify_key = _load_public_key(key_path)
 
     body = {
@@ -214,15 +207,10 @@ def validate_manifest(
     return ConsentValidationResult(manifest=manifest, verify_key=verify_key)
 
 
-<<<<<<< HEAD
-def sign_report_hash(report_hash: str, *, private_key_path: Optional[Path] = None) -> bytes:
-    key_path = _resolve_key_path(private_key_path, "REPORT_SIGNING_KEY_PATH")
-=======
 def sign_report_hash(
-    report_hash: str, *, private_key_path: Optional[Path] = None
+    report_hash: str, *, private_key_path: Path | None = None
 ) -> bytes:
-    key_path = private_key_path or DEFAULT_PRIVATE_KEY
->>>>>>> 74be2f0 (style: fix reporters.py syntax and apply Black formatting)
+    key_path = _resolve_key_path(private_key_path, "REPORT_SIGNING_KEY_PATH")
     signing_key = _load_private_key(key_path)
     message = report_hash.encode("utf-8")
     signed = signing_key.sign(message)

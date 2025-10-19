@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 # Modified by codex: 2024-05-08
-
 import html
 import json
 import logging
+from collections.abc import Iterable, Sequence
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any
+
+from . import __version__
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 PROJECT_TEMPLATES = PACKAGE_DIR.parent / "templates"
@@ -25,7 +27,7 @@ except Exception:  # pragma: no cover - fallback for minimal environments
     Environment = None  # type: ignore[assignment]
     FileSystemLoader = None  # type: ignore[assignment]
     select_autoescape = None  # type: ignore[assignment]
-    _JINJA_ENV: Optional[Environment] = None
+    _JINJA_ENV: Environment | None = None
 else:  # pragma: no cover - exercised when Jinja2 installed
     loader_paths = [str(path) for path in TEMPLATE_DIRS] or [str(PACKAGE_TEMPLATES)]
     _JINJA_ENV = Environment(
@@ -33,19 +35,17 @@ else:  # pragma: no cover - exercised when Jinja2 installed
         autoescape=select_autoescape(["html", "xml"]),
     )
 
-from . import __version__
-
 LOGGER = logging.getLogger(__name__)
 PDF_FALLBACK_MESSAGE = "PDF dependencies not found — served HTML version instead."
 
 
-def render_json(data: Dict[str, object]) -> str:
+def render_json(data: dict[str, object]) -> str:
     """Return a canonical JSON representation of the scan results."""
 
     return json.dumps(data, indent=2, sort_keys=True)
 
 
-def render_markdown(data: Dict[str, object]) -> str:
+def render_markdown(data: dict[str, object]) -> str:
     """Render the report data in Markdown format."""
 
     if _JINJA_ENV is not None and _JINJA_ENV.loader is not None:
@@ -53,20 +53,16 @@ def render_markdown(data: Dict[str, object]) -> str:
             template = _JINJA_ENV.get_template("report.md.j2")
             return template.render(data=data)
         except Exception:
-            pass
+            LOGGER.exception(
+                "Markdown template rendering failed; using fallback renderer."
+            )
 
-    target = data.get("target", "unknown")
-    timestamp = data.get("timestamp", datetime.utcnow().isoformat() + "Z")
-    hostname = data.get("hostname") or "N/A"
-    ports = _format_list(data.get("ports", []))
-    open_ports = _format_list(data.get("open_ports", []))
-    findings = data.get("findings", [])
-    recommendations = _build_recommendations(findings)
-
-    lines: List[str] = []
+    context = _build_markdown_context(data)
+    lines = _render_markdown_sections(context)
+    return "\n".join(lines) + "\n"
 
 
-def render_html(data: Dict[str, object], out_path: Path) -> Path:
+def render_html(data: dict[str, object], out_path: Path) -> Path:
     """Render the report data as HTML and persist it to ``out_path``."""
 
     if not isinstance(out_path, Path):
@@ -80,7 +76,7 @@ def render_html(data: Dict[str, object], out_path: Path) -> Path:
     return out_path.resolve()
 
 
-def generate_pdf(html_path: Path, pdf_path: Path) -> Tuple[Path, bool]:
+def generate_pdf(html_path: Path, pdf_path: Path) -> tuple[Path, bool]:
     """Generate a PDF from ``html_path`` and return the written file."""
 
     if not isinstance(html_path, Path):
@@ -114,8 +110,8 @@ def generate_pdf(html_path: Path, pdf_path: Path) -> Tuple[Path, bool]:
 
 
 def write_report(
-    data: Dict[str, object], outfile: Path, format: str
-) -> Tuple[Path, str]:
+    data: dict[str, object], outfile: Path, format: str
+) -> tuple[Path, str]:
     """Write ``data`` to ``outfile`` using ``format`` and return the resulting path."""
 
     if not isinstance(outfile, Path):
@@ -152,8 +148,8 @@ def _format_list(values: Iterable[object]) -> str:
     return ", ".join(str(item) for item in items)
 
 
-def _build_recommendations(findings: Sequence[Dict[str, object]]) -> List[str]:
-    suggestions: List[str] = []
+def _build_recommendations(findings: Sequence[dict[str, object]]) -> list[str]:
+    suggestions: list[str] = []
     issues = {item.get("issue") for item in findings}
 
     if "missing_security_headers" in issues:
@@ -175,24 +171,25 @@ def _build_recommendations(findings: Sequence[Dict[str, object]]) -> List[str]:
     return suggestions
 
 
-def _build_markdown_context(data: Dict[str, object]) -> Dict[str, Any]:
+def _build_markdown_context(data: dict[str, object]) -> dict[str, Any]:
     findings = data.get("findings", [])
+    safe_findings = findings if isinstance(findings, Sequence) else []
     context = {
         "target": data.get("target", "unknown"),
         "timestamp": data.get("timestamp", datetime.utcnow().isoformat() + "Z"),
         "hostname": data.get("hostname") or "N/A",
         "ports": _format_list(data.get("ports", [])) or "None",
         "open_ports": _format_list(data.get("open_ports", [])) or "None detected",
-        "findings": findings if isinstance(findings, Sequence) else [],
-        "recommendations": _build_recommendations(findings if isinstance(findings, Sequence) else []),
+        "findings": safe_findings,
+        "recommendations": _build_recommendations(safe_findings),
         "version": data.get("version", __version__),
         "runtime": data.get("runtime", {}),
     }
     return context
 
 
-def _render_markdown_sections(context: Dict[str, Any]) -> List[str]:
-    lines: List[str] = [
+def _render_markdown_sections(context: dict[str, Any]) -> list[str]:
+    lines: list[str] = [
         f"# ReconScript Report — {context['target']}",
         "",
         f"*Generated:* {context['timestamp']}",
@@ -207,7 +204,11 @@ def _render_markdown_sections(context: Dict[str, Any]) -> List[str]:
     if findings:
         for item in findings:
             port = item.get("port", "n/a") if isinstance(item, dict) else "n/a"
-            issue = item.get("issue", "observation") if isinstance(item, dict) else str(item)
+            issue = (
+                item.get("issue", "observation")
+                if isinstance(item, dict)
+                else str(item)
+            )
             lines.append(f"- Port `{port}` — `{issue}`")
             if isinstance(item, dict) and item.get("details") is not None:
                 details = item["details"]
@@ -242,7 +243,7 @@ def _render_markdown_sections(context: Dict[str, Any]) -> List[str]:
     return lines
 
 
-def _build_template_context(data: Dict[str, object]) -> Dict[str, object]:
+def _build_template_context(data: dict[str, object]) -> dict[str, object]:
     timestamp_raw = str(data.get("timestamp", datetime.utcnow().isoformat() + "Z"))
     findings = data.get("findings", [])
     findings_count = len(findings) if isinstance(findings, Sequence) else 0
@@ -272,7 +273,7 @@ def _build_template_context(data: Dict[str, object]) -> Dict[str, object]:
     }
 
 
-def _summary_rows(data: Dict[str, object]) -> List[Tuple[str, str]]:
+def _summary_rows(data: dict[str, object]) -> list[tuple[str, str]]:
     ports = _format_list(data.get("ports", [])) or "None"
     open_ports = _format_list(data.get("open_ports", [])) or "None detected"
     findings = data.get("findings", [])
@@ -282,7 +283,7 @@ def _summary_rows(data: Dict[str, object]) -> List[Tuple[str, str]]:
         runtime.get("duration") if isinstance(runtime, dict) else data.get("duration")
     )
 
-    rows: List[Tuple[str, str]] = [
+    rows: list[tuple[str, str]] = [
         ("Target", str(data.get("target", "unknown"))),
         ("Hostname", str(data.get("hostname") or "N/A")),
         ("Ports Scanned", ports),
@@ -299,8 +300,8 @@ def _summary_rows(data: Dict[str, object]) -> List[Tuple[str, str]]:
     return rows
 
 
-def _format_findings(findings: Sequence[Dict[str, object]]) -> List[Dict[str, object]]:
-    formatted: List[Dict[str, object]] = []
+def _format_findings(findings: Sequence[dict[str, object]]) -> list[dict[str, object]]:
+    formatted: list[dict[str, object]] = []
     for item in findings or []:
         formatted.append(
             {
@@ -312,8 +313,8 @@ def _format_findings(findings: Sequence[Dict[str, object]]) -> List[Dict[str, ob
     return formatted
 
 
-def _metadata_entries(data: Dict[str, object], timestamp: str) -> List[Tuple[str, str]]:
-    entries: List[Tuple[str, str]] = [
+def _metadata_entries(data: dict[str, object], timestamp: str) -> list[tuple[str, str]]:
+    entries: list[tuple[str, str]] = [
         ("Tool Version", str(data.get("version", __version__))),
         ("Report Generated", timestamp),
     ]
@@ -353,7 +354,7 @@ def _format_human_date(timestamp: str) -> str:
     return parsed.strftime("%d %B %Y %H:%M UTC")
 
 
-def _render_html_document(context: Dict[str, object]) -> str:
+def _render_html_document(context: dict[str, object]) -> str:
     if _JINJA_ENV is not None:
         try:
             template = _JINJA_ENV.get_template(HTML_TEMPLATE_NAME)
@@ -363,7 +364,7 @@ def _render_html_document(context: Dict[str, object]) -> str:
     return _render_html_fallback(context)
 
 
-def _render_html_fallback(context: Dict[str, object]) -> str:
+def _render_html_fallback(context: dict[str, object]) -> str:
     summary_rows = context.get("summary_rows", [])
     findings = context.get("findings", [])
     recommendations = context.get("recommendations", [])
@@ -423,23 +424,91 @@ def _render_html_fallback(context: Dict[str, object]) -> str:
     <title>{html.escape(str(context.get('title')))}</title>
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
     <style>
-      body {{ font-family: 'Segoe UI', 'Liberation Sans', Arial, sans-serif; margin: 0; background: #f5f7fa; color: #1f2937; }}
-      header.cover {{ background: linear-gradient(135deg, #0f172a, #1f2937); color: #f8fafc; padding: 48px 32px; text-align: center; }}
-      header.cover .logo {{ display: inline-block; padding: 10px 28px; border: 2px dashed rgba(255, 255, 255, 0.45); border-radius: 10px; letter-spacing: 0.18rem; text-transform: uppercase; margin-bottom: 24px; }}
+      body {{
+        font-family: 'Segoe UI', 'Liberation Sans', Arial, sans-serif;
+        margin: 0;
+        background: #f5f7fa;
+        color: #1f2937;
+      }}
+      header.cover {{
+        background: linear-gradient(135deg, #0f172a, #1f2937);
+        color: #f8fafc;
+        padding: 48px 32px;
+        text-align: center;
+      }}
+      header.cover .logo {{
+        display: inline-block;
+        padding: 10px 28px;
+        border: 2px dashed rgba(255, 255, 255, 0.45);
+        border-radius: 10px;
+        letter-spacing: 0.18rem;
+        text-transform: uppercase;
+        margin-bottom: 24px;
+      }}
       main {{ padding: 36px 48px 64px; }}
       section {{ margin-bottom: 48px; }}
       h2 {{ border-bottom: 2px solid #1f2937; padding-bottom: 6px; }}
-      table.summary {{ width: 100%; border-collapse: collapse; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08); }}
-      table.summary th, table.summary td {{ padding: 14px 18px; border-bottom: 1px solid #e2e8f0; }}
-      table.summary th {{ width: 30%; background: #f1f5f9; font-weight: 600; letter-spacing: 0.02rem; }}
-      ul.findings {{ list-style: none; padding-left: 0; }}
-      ul.findings li {{ background: #ffffff; border-left: 4px solid #f97316; padding: 16px 20px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1); }}
-      ul.findings li pre {{ background: #0f172a; color: #f8fafc; padding: 12px; border-radius: 6px; overflow-x: auto; font-size: 0.85rem; }}
+      table.summary {{
+        width: 100%;
+        border-collapse: collapse;
+        background: #ffffff;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
+      }}
+      table.summary th, table.summary td {{
+        padding: 14px 18px;
+        border-bottom: 1px solid #e2e8f0;
+      }}
+      table.summary th {{
+        width: 30%;
+        background: #f1f5f9;
+        font-weight: 600;
+        letter-spacing: 0.02rem;
+      }}
+      ul.findings {{
+        list-style: none;
+        padding-left: 0;
+      }}
+      ul.findings li {{
+        background: #ffffff;
+        border-left: 4px solid #f97316;
+        padding: 16px 20px;
+        margin-bottom: 14px;
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1);
+      }}
+      ul.findings li pre {{
+        background: #0f172a;
+        color: #f8fafc;
+        padding: 12px;
+        border-radius: 6px;
+        overflow-x: auto;
+        font-size: 0.85rem;
+      }}
       ul.recommendations {{ padding-left: 18px; }}
-      dl.meta {{ display: grid; grid-template-columns: 220px 1fr; gap: 12px 18px; background: #ffffff; padding: 18px 22px; border-radius: 8px; box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08); }}
+      dl.meta {{
+        display: grid;
+        grid-template-columns: 220px 1fr;
+        gap: 12px 18px;
+        background: #ffffff;
+        padding: 18px 22px;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+      }}
       dl.meta dt {{ font-weight: 600; }}
-      dl.meta dd {{ margin: 0; font-family: 'Fira Code', 'Source Code Pro', monospace; white-space: pre-wrap; }}
-      footer {{ text-align: center; padding: 24px; background: #f1f5f9; border-top: 1px solid #e2e8f0; font-size: 0.85rem; color: #475569; }}
+      dl.meta dd {{
+        margin: 0;
+        font-family: 'Fira Code', 'Source Code Pro', monospace;
+        white-space: pre-wrap;
+      }}
+      footer {{
+        text-align: center;
+        padding: 24px;
+        background: #f1f5f9;
+        border-top: 1px solid #e2e8f0;
+        font-size: 0.85rem;
+        color: #475569;
+      }}
     </style>
   </head>
   <body>
@@ -470,7 +539,8 @@ def _render_html_fallback(context: Dict[str, object]) -> str:
       </section>
     </main>
     <footer>
-      ReconScript v{html.escape(str(context.get('version')))} · Generated {html.escape(str(context.get('timestamp')))}
+      ReconScript v{html.escape(str(context.get('version')))} ·
+      Generated {html.escape(str(context.get('timestamp')))}
     </footer>
   </body>
 </html>"""
