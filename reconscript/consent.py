@@ -14,7 +14,16 @@ from nacl import exceptions as nacl_exceptions
 from nacl.signing import SigningKey, VerifyKey
 
 SCHEMA_PATH = Path(__file__).resolve().parent / "schemas" / "scope_manifest.v1.json"
+<<<<<<< HEAD
 DEV_KEYS_DIR = Path(__file__).resolve().parents[1] / "keys"
+=======
+DEFAULT_PUBLIC_KEY = Path(
+    os.environ.get("CONSENT_PUBLIC_KEY_PATH", "keys/dev_ed25519.pub")
+)
+DEFAULT_PRIVATE_KEY = Path(
+    os.environ.get("REPORT_SIGNING_KEY_PATH", "keys/dev_ed25519.priv")
+)
+>>>>>>> 74be2f0 (style: fix reporters.py syntax and apply Black formatting)
 
 
 class ConsentError(ValueError):
@@ -136,12 +145,16 @@ def load_manifest(path: Path | str) -> ConsentManifest:
         raise ConsentError(f"Manifest missing required fields: {', '.join(missing)}")
 
     allowed_ports = payload.get("allowed_ports")
-    if not isinstance(allowed_ports, list) or not all(isinstance(p, int) for p in allowed_ports):
+    if not isinstance(allowed_ports, list) or not all(
+        isinstance(p, int) for p in allowed_ports
+    ):
         raise ConsentError("allowed_ports must be a list of integers.")
 
     evidence_level = payload.get("evidence_level")
     if evidence_level is not None and evidence_level not in {"low", "medium", "high"}:
-        raise ConsentError("evidence_level must be one of low, medium, or high when provided.")
+        raise ConsentError(
+            "evidence_level must be one of low, medium, or high when provided."
+        )
 
     manifest = ConsentManifest(
         owner_name=str(payload["owner_name"]).strip(),
@@ -156,8 +169,15 @@ def load_manifest(path: Path | str) -> ConsentManifest:
     return manifest
 
 
+<<<<<<< HEAD
 def validate_manifest(manifest: ConsentManifest, *, public_key_path: Optional[Path] = None) -> ConsentValidationResult:
     key_path = _resolve_key_path(public_key_path, "CONSENT_PUBLIC_KEY_PATH")
+=======
+def validate_manifest(
+    manifest: ConsentManifest, *, public_key_path: Optional[Path] = None
+) -> ConsentValidationResult:
+    key_path = public_key_path or DEFAULT_PUBLIC_KEY
+>>>>>>> 74be2f0 (style: fix reporters.py syntax and apply Black formatting)
     verify_key = _load_public_key(key_path)
 
     body = {
@@ -165,8 +185,12 @@ def validate_manifest(manifest: ConsentManifest, *, public_key_path: Optional[Pa
         "owner_email": manifest.owner_email,
         "target": manifest.target,
         "allowed_ports": manifest.allowed_ports,
-        "valid_from": manifest.valid_from.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z"),
-        "valid_until": manifest.valid_until.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z"),
+        "valid_from": manifest.valid_from.replace(tzinfo=timezone.utc)
+        .isoformat()
+        .replace("+00:00", "Z"),
+        "valid_until": manifest.valid_until.replace(tzinfo=timezone.utc)
+        .isoformat()
+        .replace("+00:00", "Z"),
     }
     if manifest.evidence_level:
         body["evidence_level"] = manifest.evidence_level
@@ -183,16 +207,23 @@ def validate_manifest(manifest: ConsentManifest, *, public_key_path: Optional[Pa
 
     now = datetime.now(timezone.utc)
     if manifest.valid_from > now or manifest.valid_until < now:
-        raise ConsentError("Consent manifest is not currently valid based on validity window.")
+        raise ConsentError(
+            "Consent manifest is not currently valid based on validity window."
+        )
 
     return ConsentValidationResult(manifest=manifest, verify_key=verify_key)
 
 
+<<<<<<< HEAD
 def sign_report_hash(report_hash: str, *, private_key_path: Optional[Path] = None) -> bytes:
     key_path = _resolve_key_path(private_key_path, "REPORT_SIGNING_KEY_PATH")
+=======
+def sign_report_hash(
+    report_hash: str, *, private_key_path: Optional[Path] = None
+) -> bytes:
+    key_path = private_key_path or DEFAULT_PRIVATE_KEY
+>>>>>>> 74be2f0 (style: fix reporters.py syntax and apply Black formatting)
     signing_key = _load_private_key(key_path)
     message = report_hash.encode("utf-8")
     signed = signing_key.sign(message)
     return signed.signature
-
-

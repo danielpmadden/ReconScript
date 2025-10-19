@@ -103,7 +103,9 @@ def install_dependencies(
 
     missing = list(_missing_modules(REQUIREMENT_IMPORTS))
     if missing:
-        output.print(f"Installing missing dependencies: {', '.join(sorted(set(missing)))} …")
+        output.print(
+            f"Installing missing dependencies: {', '.join(sorted(set(missing)))} …"
+        )
 
     if force:
         output.print("Force flag supplied — reinstalling requirements…")
@@ -123,7 +125,9 @@ def install_dependencies(
         output.print("Resolving Python requirements (this may take a moment)…")
         result = subprocess.run(command, capture_output=True, text=True)
         if result.returncode != 0:
-            combined_output = "\n".join(part for part in (result.stdout, result.stderr) if part)
+            combined_output = "\n".join(
+                part for part in (result.stdout, result.stderr) if part
+            )
             raise RuntimeError(
                 "Dependency installation failed with exit code"
                 f" {result.returncode}:\n{combined_output or '(no output)'}"
@@ -136,7 +140,9 @@ def install_dependencies(
 
 
 def _parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Install ReconScript runtime dependencies.")
+    parser = argparse.ArgumentParser(
+        description="Install ReconScript runtime dependencies."
+    )
     parser.add_argument(
         "--python",
         dest="python",
@@ -161,7 +167,9 @@ def main(argv: Iterable[str] | None = None) -> None:
     args = _parse_args(argv)
     console = create_console()
     try:
-        install_dependencies(args.python, args.requirements, force=args.force, console=console)
+        install_dependencies(
+            args.python, args.requirements, force=args.force, console=console
+        )
     except Exception as exc:  # pragma: no cover - invoked from CLI
         console.print(f"[red]Failed to install dependencies: {exc}[/red]")
         raise SystemExit(1)

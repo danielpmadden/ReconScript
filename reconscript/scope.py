@@ -9,7 +9,12 @@ import socket
 from dataclasses import dataclass
 from typing import Optional
 
-__all__ = ["ScopeValidation", "ScopeError", "validate_target", "ensure_within_allowlist"]
+__all__ = [
+    "ScopeValidation",
+    "ScopeError",
+    "validate_target",
+    "ensure_within_allowlist",
+]
 
 WHITESPACE_PATTERN = re.compile(r"\s")
 INVALID_CHAR_PATTERN = re.compile(r"[*,]")
@@ -56,13 +61,17 @@ def _validate_ip(target: str, allow_cidr: bool) -> ScopeValidation:
         except ValueError as exc:
             raise ScopeError("Invalid CIDR notation supplied for target.") from exc
         if network.num_addresses != 1:
-            raise ScopeError("Only single-host CIDR ranges (/32 or /128) are permitted.")
+            raise ScopeError(
+                "Only single-host CIDR ranges (/32 or /128) are permitted."
+            )
         normalized = str(network.network_address)
         return ScopeValidation(original=target, target=normalized, kind="ip")
     try:
         address = ipaddress.ip_address(target)
     except ValueError as exc:
-        raise ScopeError("Target must be a valid IPv4 or IPv6 address or hostname.") from exc
+        raise ScopeError(
+            "Target must be a valid IPv4 or IPv6 address or hostname."
+        ) from exc
     return ScopeValidation(original=target, target=str(address), kind="ip")
 
 
@@ -103,7 +112,9 @@ def validate_target(
     if RANGE_PATTERN.search(target):
         raise ScopeError("Target ranges are not permitted.")
     if "/" in target and not allow_cidr:
-        raise ScopeError("CIDR notation is not permitted unless ALLOW_CIDR=true is set in the environment.")
+        raise ScopeError(
+            "CIDR notation is not permitted unless ALLOW_CIDR=true is set in the environment."
+        )
 
     try:
         return _validate_ip(target, allow_cidr)
@@ -119,13 +130,26 @@ def validate_target(
     if expected_ip:
         normalized_expected = str(ipaddress.ip_address(expected_ip))
         if len(resolved) != 1:
-            raise ScopeError("Hostname must resolve to exactly one address when expected IP is provided.")
+            raise ScopeError(
+                "Hostname must resolve to exactly one address when expected IP is provided."
+            )
         if resolved[0] != normalized_expected:
-            raise ScopeError("Hostname resolution did not match the expected IP address.")
-        return ScopeValidation(original=target, target=target, kind="hostname", resolved_ip=normalized_expected)
+            raise ScopeError(
+                "Hostname resolution did not match the expected IP address."
+            )
+        return ScopeValidation(
+            original=target,
+            target=target,
+            kind="hostname",
+            resolved_ip=normalized_expected,
+        )
     if len(resolved) != 1:
-        raise ScopeError("Hostname resolves to multiple addresses; supply --expected-ip to continue.")
-    return ScopeValidation(original=target, target=target, kind="hostname", resolved_ip=resolved[0])
+        raise ScopeError(
+            "Hostname resolves to multiple addresses; supply --expected-ip to continue."
+        )
+    return ScopeValidation(
+        original=target, target=target, kind="hostname", resolved_ip=resolved[0]
+    )
 
 
 def ensure_within_allowlist(target: ScopeValidation) -> None:
@@ -137,4 +161,6 @@ def ensure_within_allowlist(target: ScopeValidation) -> None:
     except ValueError as exc:  # pragma: no cover - defensive safety
         raise ScopeError("Target resolved to an invalid IP address.") from exc
     if ip_obj.is_multicast or ip_obj.is_reserved:
-        raise ScopeError("Scanning multicast or reserved IP ranges is not permitted by default.")
+        raise ScopeError(
+            "Scanning multicast or reserved IP ranges is not permitted by default."
+        )

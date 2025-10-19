@@ -12,6 +12,8 @@ from .exceptions import BadSignatureError
 _b = 256
 _q = 2**255 - 19
 _l = 2**252 + 27742317777372353535851937790883648493
+
+
 def _inv(value: int) -> int:
     return pow(value, _q - 2, _q)
 
@@ -32,6 +34,7 @@ class SignedMessage:
 
 
 # Utility functions ---------------------------------------------------------
+
 
 def _sha512(data: bytes) -> bytes:
     return hashlib.sha512(data).digest()

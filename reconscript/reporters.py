@@ -14,7 +14,9 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 PACKAGE_DIR = Path(__file__).resolve().parent
 PROJECT_TEMPLATES = PACKAGE_DIR.parent / "templates"
 PACKAGE_TEMPLATES = PACKAGE_DIR / "templates"
-TEMPLATE_DIRS = [path for path in (PROJECT_TEMPLATES, PACKAGE_TEMPLATES) if path.exists()]
+TEMPLATE_DIRS = [
+    path for path in (PROJECT_TEMPLATES, PACKAGE_TEMPLATES) if path.exists()
+]
 HTML_TEMPLATE_NAME = "report.html"
 
 try:  # pragma: no cover - optional dependency may be unavailable in CI
@@ -48,14 +50,20 @@ def render_markdown(data: Dict[str, object]) -> str:
 
     if _JINJA_ENV is not None and _JINJA_ENV.loader is not None:
         try:
-            template = _JINJA_ENV.get_template('report.md.j2')
+            template = _JINJA_ENV.get_template("report.md.j2")
             return template.render(data=data)
         except Exception:
             pass
 
-    context = _build_markdown_context(data)
-    lines = _render_markdown_sections(context)
-    return "\n".join(lines) + "\n"
+    target = data.get("target", "unknown")
+    timestamp = data.get("timestamp", datetime.utcnow().isoformat() + "Z")
+    hostname = data.get("hostname") or "N/A"
+    ports = _format_list(data.get("ports", []))
+    open_ports = _format_list(data.get("open_ports", []))
+    findings = data.get("findings", [])
+    recommendations = _build_recommendations(findings)
+
+    lines: List[str] = []
 
 
 def render_html(data: Dict[str, object], out_path: Path) -> Path:
@@ -85,19 +93,29 @@ def generate_pdf(html_path: Path, pdf_path: Path) -> Tuple[Path, bool]:
     try:  # pragma: no cover - exercised indirectly via integration tests
         from weasyprint import HTML
     except ImportError as exc:
-        LOGGER.warning("%s Install via 'pip install .[pdf]' or rebuild with INCLUDE_PDF=true. (%s)", PDF_FALLBACK_MESSAGE, exc)
+        LOGGER.warning(
+            "%s Install via 'pip install .[pdf]' or rebuild with INCLUDE_PDF=true. (%s)",
+            PDF_FALLBACK_MESSAGE,
+            exc,
+        )
         return html_path.resolve(), False
 
     try:
         HTML(filename=str(html_path)).write_pdf(str(pdf_path))
     except OSError as exc:
-        LOGGER.warning("%s Install via 'pip install .[pdf]' or rebuild with INCLUDE_PDF=true. (%s)", PDF_FALLBACK_MESSAGE, exc)
+        LOGGER.warning(
+            "%s Install via 'pip install .[pdf]' or rebuild with INCLUDE_PDF=true. (%s)",
+            PDF_FALLBACK_MESSAGE,
+            exc,
+        )
         return html_path.resolve(), False
 
     return pdf_path.resolve(), True
 
 
-def write_report(data: Dict[str, object], outfile: Path, format: str) -> Tuple[Path, str]:
+def write_report(
+    data: Dict[str, object], outfile: Path, format: str
+) -> Tuple[Path, str]:
     """Write ``data`` to ``outfile`` using ``format`` and return the resulting path."""
 
     if not isinstance(outfile, Path):
@@ -139,13 +157,21 @@ def _build_recommendations(findings: Sequence[Dict[str, object]]) -> List[str]:
     issues = {item.get("issue") for item in findings}
 
     if "missing_security_headers" in issues:
-        suggestions.append("Set Strict-Transport-Security and related headers on all web front-ends.")
+        suggestions.append(
+            "Set Strict-Transport-Security and related headers on all web front-ends."
+        )
     if "session_cookie_flags" in issues:
-        suggestions.append("Configure Secure and HttpOnly attributes on session cookies.")
+        suggestions.append(
+            "Configure Secure and HttpOnly attributes on session cookies."
+        )
     if "server_error" in issues:
-        suggestions.append("Review backend error logs for endpoints returning 5xx responses.")
+        suggestions.append(
+            "Review backend error logs for endpoints returning 5xx responses."
+        )
     if not suggestions and findings:
-        suggestions.append("Investigate informational findings for context-specific remediation.")
+        suggestions.append(
+            "Investigate informational findings for context-specific remediation."
+        )
     return suggestions
 
 
@@ -252,7 +278,9 @@ def _summary_rows(data: Dict[str, object]) -> List[Tuple[str, str]]:
     findings = data.get("findings", [])
     findings_count = len(findings) if isinstance(findings, Sequence) else 0
     runtime = data.get("runtime") if isinstance(data.get("runtime"), dict) else {}
-    duration = runtime.get("duration") if isinstance(runtime, dict) else data.get("duration")
+    duration = (
+        runtime.get("duration") if isinstance(runtime, dict) else data.get("duration")
+    )
 
     rows: List[Tuple[str, str]] = [
         ("Target", str(data.get("target", "unknown"))),
@@ -342,7 +370,7 @@ def _render_html_fallback(context: Dict[str, object]) -> str:
     metadata = context.get("metadata", [])
 
     summary_html = "".join(
-        f"<tr><th scope=\"row\">{html.escape(str(label))}</th><td>{html.escape(str(value))}</td></tr>"
+        f'<tr><th scope="row">{html.escape(str(label))}</th><td>{html.escape(str(value))}</td></tr>'
         for label, value in summary_rows
     )
 
@@ -364,21 +392,29 @@ def _render_html_fallback(context: Dict[str, object]) -> str:
             )
             for item in findings
         )
-        findings_section = f"<ul class=\"findings\">{findings_html}</ul>"
+        findings_section = f'<ul class="findings">{findings_html}</ul>'
     else:
         findings_section = "<p>No issues detected during the assessment.</p>"
 
     if recommendations:
-        recommendations_html = "<ul class=\"recommendations\">" + "".join(
-            f"<li>{html.escape(str(item))}</li>" for item in recommendations
-        ) + "</ul>"
+        recommendations_html = (
+            '<ul class="recommendations">'
+            + "".join(f"<li>{html.escape(str(item))}</li>" for item in recommendations)
+            + "</ul>"
+        )
     else:
-        recommendations_html = "<p>Continue monitoring and maintain existing controls.</p>"
+        recommendations_html = (
+            "<p>Continue monitoring and maintain existing controls.</p>"
+        )
 
-    metadata_html = "<dl class=\"meta\">" + "".join(
-        f"<dt>{html.escape(str(label))}</dt><dd>{html.escape(str(value))}</dd>"
-        for label, value in metadata
-    ) + "</dl>"
+    metadata_html = (
+        '<dl class="meta">'
+        + "".join(
+            f"<dt>{html.escape(str(label))}</dt><dd>{html.escape(str(value))}</dd>"
+            for label, value in metadata
+        )
+        + "</dl>"
+    )
 
     return f"""<!DOCTYPE html>
 <html lang=\"en\">
@@ -447,4 +483,3 @@ __all__ = [
     "generate_pdf",
     "write_report",
 ]
-

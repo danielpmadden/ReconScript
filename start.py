@@ -17,11 +17,15 @@ from typing import List
 
 try:  # pragma: no cover - optional dependency fallback
     from dotenv import load_dotenv
-except ModuleNotFoundError:  # pragma: no cover - minimal shim when python-dotenv missing
+except (
+    ModuleNotFoundError
+):  # pragma: no cover - minimal shim when python-dotenv missing
+
     def load_dotenv() -> None:  # type: ignore[return-value]
         """Fallback no-op when python-dotenv is unavailable."""
 
         return None
+
 
 from install_dependencies import create_console, install_dependencies
 
@@ -64,13 +68,17 @@ def render_banner(version: str, environment: str) -> None:
     try:  # pragma: no cover - enhanced output when Rich is present
         from rich.panel import Panel
 
-        console.print(Panel(banner, expand=False, border_style="bright_cyan", style="bold cyan"))
+        console.print(
+            Panel(banner, expand=False, border_style="bright_cyan", style="bold cyan")
+        )
     except Exception:
         console.print(banner)
 
 
 def in_virtualenv() -> bool:
-    return sys.prefix != getattr(sys, "base_prefix", sys.prefix) or bool(os.environ.get("VIRTUAL_ENV"))
+    return sys.prefix != getattr(sys, "base_prefix", sys.prefix) or bool(
+        os.environ.get("VIRTUAL_ENV")
+    )
 
 
 def in_docker() -> bool:
@@ -119,10 +127,11 @@ def ensure_virtualenv() -> Path:
     return python_path
 
 
-
 def _wait_and_open_browser(url: str, health_url: str, environment: str) -> None:
     def _open() -> None:
-        console.print("Waiting for ReconScript to pass health check before opening browser…")
+        console.print(
+            "Waiting for ReconScript to pass health check before opening browser…"
+        )
         import requests  # Lazily import so dependency installation can complete first
 
         deadline = time.time() + 60
@@ -131,16 +140,26 @@ def _wait_and_open_browser(url: str, health_url: str, environment: str) -> None:
                 response = requests.get(health_url, timeout=2)
                 if response.ok:
                     if environment == "docker":
-                        console.print("ReconScript UI is ready inside Docker — open your browser at " + url)
+                        console.print(
+                            "ReconScript UI is ready inside Docker — open your browser at "
+                            + url
+                        )
                         return
-                    console.print("ReconScript UI is ready — launching default browser.")
+                    console.print(
+                        "ReconScript UI is ready — launching default browser."
+                    )
                     try:
                         if environment == "wsl" and shutil.which("wslview"):
-                            subprocess.Popen(["wslview", url])  # noqa: S603,S607 - best effort helper
+                            subprocess.Popen(
+                                ["wslview", url]
+                            )  # noqa: S603,S607 - best effort helper
                         else:
                             webbrowser.open_new(url)
                     except Exception:
-                        console.print("Unable to open browser automatically. Please navigate to " + url)
+                        console.print(
+                            "Unable to open browser automatically. Please navigate to "
+                            + url
+                        )
                     return
             except requests.RequestException:
                 pass
@@ -196,17 +215,26 @@ def main() -> None:
 
     if environment != "docker" and not venv_active:
         python_path = ensure_virtualenv()
-        if Path(sys.executable).resolve() != python_path.resolve() and os.environ.get("RECONSCRIPT_BOOTSTRAPPED") != "1":
+        if (
+            Path(sys.executable).resolve() != python_path.resolve()
+            and os.environ.get("RECONSCRIPT_BOOTSTRAPPED") != "1"
+        ):
             console.print("Switching to the project virtual environment …")
             env = os.environ.copy()
             env["RECONSCRIPT_BOOTSTRAPPED"] = "1"
             command = [str(python_path), str(ROOT / "start.py"), *sys.argv[1:]]
             raise SystemExit(subprocess.call(command, env=env))
-        post_launch_messages.append(f"Using virtual environment at {python_path.parent}")
+        post_launch_messages.append(
+            f"Using virtual environment at {python_path.parent}"
+        )
     elif environment == "docker":
-        post_launch_messages.append("Running inside a Docker container — using system interpreter.")
+        post_launch_messages.append(
+            "Running inside a Docker container — using system interpreter."
+        )
     else:
-        post_launch_messages.append("Virtual environment detected — continuing with current interpreter.")
+        post_launch_messages.append(
+            "Virtual environment detected — continuing with current interpreter."
+        )
 
     python_executable = Path(sys.executable)
     try:
@@ -253,7 +281,9 @@ def main() -> None:
     public_url = f"http://127.0.0.1:{DEFAULT_PORT}"
     health_url = f"http://127.0.0.1:{DEFAULT_PORT}/health"
     if environment == "docker":
-        console.print("Browser auto-launch disabled inside Docker. Access the UI at " + public_url)
+        console.print(
+            "Browser auto-launch disabled inside Docker. Access the UI at " + public_url
+        )
     else:
         _wait_and_open_browser(public_url, health_url, environment)
 

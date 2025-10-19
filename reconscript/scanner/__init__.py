@@ -75,7 +75,9 @@ def validate_port_list(ports: Iterable[int]) -> Tuple[int, ...]:
     return tuple(validated)
 
 
-def resolve_addresses(target: str, enable_ipv6: bool) -> List[Tuple[int, int, int, str, Tuple[str, int]]]:
+def resolve_addresses(
+    target: str, enable_ipv6: bool
+) -> List[Tuple[int, int, int, str, Tuple[str, int]]]:
     family = socket.AF_UNSPEC if enable_ipv6 else socket.AF_INET
     try:
         infos = socket.getaddrinfo(target, None, family=family, type=socket.SOCK_STREAM)
@@ -103,7 +105,9 @@ def tcp_connect_scan(config: ScanConfig, bucket: TokenBucket) -> List[int]:
         for family, _, _, _, sockaddr in addresses:
             host = sockaddr[0]
             try:
-                with socket.create_connection((host, port), timeout=config.connect_timeout):
+                with socket.create_connection(
+                    (host, port), timeout=config.connect_timeout
+                ):
                     success = True
                     break
             except (socket.timeout, ConnectionRefusedError, OSError) as exc:
@@ -121,12 +125,16 @@ def _build_url(hostname: str, port: int) -> str:
     return f"{scheme}://{hostname}:{port}"
 
 
-def _redact_headers(headers: Dict[str, str], redaction_keys: set[str]) -> Dict[str, str]:
+def _redact_headers(
+    headers: Dict[str, str], redaction_keys: set[str]
+) -> Dict[str, str]:
     sanitized: Dict[str, str] = {}
     for key, value in headers.items():
         lower = key.lower()
         redact = lower in redaction_keys
-        if lower.startswith("x-") and any(token in lower for token in ("auth", "token", "key")):
+        if lower.startswith("x-") and any(
+            token in lower for token in ("auth", "token", "key")
+        ):
             redact = True
         sanitized[key] = "[redacted]" if redact else value
     return sanitized
@@ -197,7 +205,9 @@ def _detect_external_redirect(expected_host: str, response: Response) -> Optiona
     return None
 
 
-def _http_request(url: str, max_retries: int, connect_timeout: float, read_timeout: float) -> Tuple[Optional[Response], Optional[str]]:
+def _http_request(
+    url: str, max_retries: int, connect_timeout: float, read_timeout: float
+) -> Tuple[Optional[Response], Optional[str]]:
     headers = {"User-Agent": USER_AGENT}
     attempt = 0
     while attempt <= max_retries:
@@ -212,7 +222,7 @@ def _http_request(url: str, max_retries: int, connect_timeout: float, read_timeo
         except requests_exceptions.RequestException as exc:
             if attempt >= max_retries:
                 return None, str(exc)
-            sleep = min(4.0, (2 ** attempt) * 0.5)
+            sleep = min(4.0, (2**attempt) * 0.5)
             jitter = random.uniform(0, 0.25)
             time.sleep(sleep + jitter)
             attempt += 1
@@ -225,7 +235,9 @@ def _http_probe_single(
     port: int,
 ) -> Dict[str, object]:
     url = _build_url(hostname, port)
-    response, error = _http_request(url, config.max_retries, config.connect_timeout, config.read_timeout)
+    response, error = _http_request(
+        url, config.max_retries, config.connect_timeout, config.read_timeout
+    )
     if error:
         LOGGER.debug("HTTP probe for %s failed: %s", url, error)
         return {"error": error}
@@ -260,7 +272,11 @@ def _http_probe_single(
     metadata["raw_request"] = {
         "method": request_info.method,
         "headers": dict(request_info.headers),
-        "body": request_info.body.decode("utf-8", errors="replace") if isinstance(request_info.body, bytes) else request_info.body,
+        "body": (
+            request_info.body.decode("utf-8", errors="replace")
+            if isinstance(request_info.body, bytes)
+            else request_info.body
+        ),
     }
     metadata["raw_response"] = {
         "status_code": response.status_code,
@@ -270,20 +286,27 @@ def _http_probe_single(
     return metadata
 
 
-def http_probe_services(config: ScanConfig, hostname: str, ports: Sequence[int]) -> Dict[int, Dict[str, object]]:
+def http_probe_services(
+    config: ScanConfig, hostname: str, ports: Sequence[int]
+) -> Dict[int, Dict[str, object]]:
     results: Dict[int, Dict[str, object]] = {}
     http_ports = list(ports)
     if not http_ports:
         return results
 
     with ThreadPoolExecutor(max_workers=config.http_workers) as executor:
-        future_map = {executor.submit(_http_probe_single, config, hostname, port): port for port in http_ports}
+        future_map = {
+            executor.submit(_http_probe_single, config, hostname, port): port
+            for port in http_ports
+        }
         for future in as_completed(future_map):
             port = future_map[future]
             try:
                 results[port] = future.result()
             except Exception as exc:  # pragma: no cover - defensive guard
-                LOGGER.error("HTTP probe for port %s raised unexpected error: %s", port, exc)
+                LOGGER.error(
+                    "HTTP probe for port %s raised unexpected error: %s", port, exc
+                )
                 results[port] = {"error": str(exc)}
     return results
 
@@ -295,14 +318,22 @@ def fetch_tls_certificate(config: ScanConfig, port: int) -> Dict[str, object]:
     for family, _, _, _, sockaddr in addresses:
         host = sockaddr[0]
         try:
-            with socket.create_connection((host, port), timeout=config.connect_timeout) as sock:
-                with context.wrap_socket(sock, server_hostname=config.hostname or config.target) as wrapped:
+            with socket.create_connection(
+                (host, port), timeout=config.connect_timeout
+            ) as sock:
+                with context.wrap_socket(
+                    sock, server_hostname=config.hostname or config.target
+                ) as wrapped:
                     certificate = wrapped.getpeercert()
                     if not certificate:
                         continue
                     return {
-                        "subject": dict(entry[0] for entry in certificate.get("subject", [])),
-                        "issuer": dict(entry[0] for entry in certificate.get("issuer", [])),
+                        "subject": dict(
+                            entry[0] for entry in certificate.get("subject", [])
+                        ),
+                        "issuer": dict(
+                            entry[0] for entry in certificate.get("issuer", [])
+                        ),
                         "notBefore": certificate.get("notBefore"),
                         "notAfter": certificate.get("notAfter"),
                         "serialNumber": certificate.get("serialNumber"),
@@ -316,7 +347,9 @@ def fetch_tls_certificate(config: ScanConfig, port: int) -> Dict[str, object]:
 def fetch_robots(config: ScanConfig, hostname: str) -> Dict[str, object]:
     for scheme in ("https", "http"):
         url = f"{scheme}://{hostname}/robots.txt"
-        response, error = _http_request(url, config.max_retries, config.connect_timeout, config.read_timeout)
+        response, error = _http_request(
+            url, config.max_retries, config.connect_timeout, config.read_timeout
+        )
         if error:
             continue
         assert response is not None
@@ -324,27 +357,43 @@ def fetch_robots(config: ScanConfig, hostname: str) -> Dict[str, object]:
         if redirect:
             continue
         if response.status_code == 200 and response.text.strip():
-            body = response.text if config.evidence_level == "high" else response.text[:2000]
+            body = (
+                response.text
+                if config.evidence_level == "high"
+                else response.text[:2000]
+            )
             return {"url": response.url, "body": body}
     return {"note": "robots.txt not present or inaccessible"}
 
 
-def generate_findings(http_results: Dict[int, Dict[str, object]]) -> List[Dict[str, object]]:
+def generate_findings(
+    http_results: Dict[int, Dict[str, object]],
+) -> List[Dict[str, object]]:
     findings: List[Dict[str, object]] = []
     for port, result in http_results.items():
         headers = result.get("security_headers_check")
         if isinstance(headers, dict):
             missing = headers.get("missing", [])
             if missing:
-                findings.append({"port": port, "issue": "missing_security_headers", "details": missing})
+                findings.append(
+                    {
+                        "port": port,
+                        "issue": "missing_security_headers",
+                        "details": missing,
+                    }
+                )
         cookie_flags = result.get("cookie_flags")
         if isinstance(cookie_flags, dict) and (
             not cookie_flags.get("secure") or not cookie_flags.get("httponly")
         ):
-            findings.append({"port": port, "issue": "session_cookie_flags", "details": cookie_flags})
+            findings.append(
+                {"port": port, "issue": "session_cookie_flags", "details": cookie_flags}
+            )
         status_code = result.get("status_code")
         if isinstance(status_code, int) and status_code >= 500:
-            findings.append({"port": port, "issue": "server_error", "details": status_code})
+            findings.append(
+                {"port": port, "issue": "server_error", "details": status_code}
+            )
     return findings
 
 
@@ -373,5 +422,3 @@ __all__ = [
     "check_security_headers",
     "serialize_results",
 ]
-
-

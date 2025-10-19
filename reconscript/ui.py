@@ -48,6 +48,7 @@ class StaticUser(UserMixin):
         self.role = role
 
 
+<<<<<<< HEAD
 def _allow_dev_secrets() -> bool:
     return os.environ.get("ALLOW_DEV_SECRETS", "false").lower() == "true"
 
@@ -56,6 +57,12 @@ def _enforce_secret_path(path: Path, *, env_var: str) -> Path:
     resolved = path.expanduser().resolve()
     if not resolved.exists():
         raise RuntimeError(f"{env_var} must point to an existing file (got {resolved}).")
+=======
+def _load_secret_key() -> bytes:
+    secret_path = Path(
+        os.environ.get("FLASK_SECRET_KEY_FILE", "keys/dev_flask_secret.key")
+    )
+>>>>>>> 74be2f0 (style: fix reporters.py syntax and apply Black formatting)
     try:
         if DEV_KEYS_DIR in resolved.parents and not _allow_dev_secrets():
             raise RuntimeError(
@@ -78,10 +85,16 @@ def _load_secret_key() -> bytes:
     try:
         secret = secret_path.read_bytes().strip()
     except OSError as exc:
+<<<<<<< HEAD
         raise RuntimeError(f"Unable to read Flask secret key from {secret_path}: {exc}") from exc
     if not secret:
         raise RuntimeError(f"Secret key file {secret_path} is empty.")
     return secret
+=======
+        raise RuntimeError(
+            f"Unable to read Flask secret key from {secret_path}: {exc}"
+        ) from exc
+>>>>>>> 74be2f0 (style: fix reporters.py syntax and apply Black formatting)
 
 
 def _rbac_required(role: str):
@@ -90,7 +103,10 @@ def _rbac_required(role: str):
         def wrapper(*args, **kwargs):
             if not current_user.is_authenticated:
                 return redirect(url_for("login"))
-            if current_app.config.get("RBAC_ENABLED") and getattr(current_user, "role", None) != role:
+            if (
+                current_app.config.get("RBAC_ENABLED")
+                and getattr(current_user, "role", None) != role
+            ):
                 abort(403)
             return func(*args, **kwargs)
 
@@ -126,7 +142,9 @@ def create_app() -> Flask:
     public_ui = os.environ.get("ENABLE_PUBLIC_UI", "false").lower() == "true"
     rbac_enabled = os.environ.get("ENABLE_RBAC", "false").lower() == "true"
     if public_ui and not rbac_enabled:
-        raise RuntimeError("ENABLE_PUBLIC_UI=true requires ENABLE_RBAC=true to protect access.")
+        raise RuntimeError(
+            "ENABLE_PUBLIC_UI=true requires ENABLE_RBAC=true to protect access."
+        )
 
     app = Flask(__name__)
     app.config["RBAC_ENABLED"] = rbac_enabled
@@ -141,7 +159,9 @@ def create_app() -> Flask:
     user = StaticUser(username, "admin")
 
     @login_manager.user_loader
-    def load_user(user_id: str) -> Optional[StaticUser]:  # pragma: no cover - simple lookup
+    def load_user(
+        user_id: str,
+    ) -> Optional[StaticUser]:  # pragma: no cover - simple lookup
         if user_id == user.id:
             return user
         return None
@@ -203,7 +223,11 @@ def create_app() -> Flask:
             hostname = request.form.get("hostname") or None
             evidence_level = request.form.get("evidence_level", "low")
             ports_raw = request.form.get("ports", "")
-            ports = [int(p.strip()) for p in ports_raw.split(",") if p.strip()] if ports_raw else None
+            ports = (
+                [int(p.strip()) for p in ports_raw.split(",") if p.strip()]
+                if ports_raw
+                else None
+            )
             try:
                 validate_target(target, expected_ip=expected_ip)
             except Exception as exc:
@@ -272,7 +296,9 @@ def create_app() -> Flask:
         if not report_file.exists():
             abort(404)
         report_data = json.loads(report_file.read_text(encoding="utf-8"))
-        return render_template("report_detail.html", report=report_data, report_id=report_id)
+        return render_template(
+            "report_detail.html", report=report_data, report_id=report_id
+        )
 
     @app.route("/results/<path:filename>")
     @login_required
@@ -287,13 +313,16 @@ def main() -> None:
     app = create_app()
     host = "0.0.0.0" if app.config["PUBLIC_UI"] else "127.0.0.1"
     port = int(os.environ.get("DEFAULT_PORT", "5000"))
-    LOGGER.warning("UI running with RBAC %s", "enabled" if app.config["RBAC_ENABLED"] else "disabled")
+    LOGGER.warning(
+        "UI running with RBAC %s",
+        "enabled" if app.config["RBAC_ENABLED"] else "disabled",
+    )
     if app.config["PUBLIC_UI"]:
-        LOGGER.warning("Public UI mode enabled — ensure reverse proxy protections are in place.")
+        LOGGER.warning(
+            "Public UI mode enabled — ensure reverse proxy protections are in place."
+        )
     app.run(host=host, port=port, threaded=True)
 
 
 if __name__ == "__main__":  # pragma: no cover - manual invocation
     main()
-
-

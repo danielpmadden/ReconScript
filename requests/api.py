@@ -34,7 +34,9 @@ def _perform_request(
 
     try:
         if parsed.scheme == "https":
-            connection = http.client.HTTPSConnection(host, port, timeout=connect_timeout)
+            connection = http.client.HTTPSConnection(
+                host, port, timeout=connect_timeout
+            )
         else:
             connection = http.client.HTTPConnection(host, port, timeout=connect_timeout)
         connection.connect()
@@ -58,14 +60,18 @@ def _perform_request(
     header_dict = {key: value for key, value in header_pairs}
     raw = type("Raw", (), {"headers": _RawHeaders(header_pairs)})()
     request = Request(method=method, url=url, headers=dict(headers or {}), body=body)
-    return Response(
-        status_code=response.status,
-        url=url,
-        headers=header_dict,
-        content=payload,
-        request=request,
-        raw=raw,
-    ), header_pairs, response.headers.get("Location", "")
+    return (
+        Response(
+            status_code=response.status,
+            url=url,
+            headers=header_dict,
+            content=payload,
+            request=request,
+            raw=raw,
+        ),
+        header_pairs,
+        response.headers.get("Location", ""),
+    )
 
 
 def get(
@@ -81,7 +87,9 @@ def get(
     current_url = url
     redirects = 0
     while True:
-        response, header_pairs, location = _perform_request(method, current_url, headers, body, timeout)
+        response, header_pairs, location = _perform_request(
+            method, current_url, headers, body, timeout
+        )
         response.history = list(history)
         if allow_redirects and response.status_code in _REDIRECT_STATUSES and location:
             history.append(response)

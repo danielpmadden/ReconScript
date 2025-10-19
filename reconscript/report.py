@@ -135,7 +135,9 @@ def _load_index() -> list[dict[str, object]]:
 
 def _write_index(entries: list[dict[str, object]]) -> None:
     INDEX_FILE.parent.mkdir(parents=True, exist_ok=True)
-    INDEX_FILE.write_text(json.dumps(entries, indent=2, sort_keys=True), encoding="utf-8")
+    INDEX_FILE.write_text(
+        json.dumps(entries, indent=2, sort_keys=True), encoding="utf-8"
+    )
 
 
 def _index_entry(report_id: str, report: Dict[str, object]) -> dict[str, object]:
@@ -165,7 +167,9 @@ def persist_report(
     report["report_hash"] = report_hash
 
     report_file = report_dir / "report.json"
-    report_file.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+    report_file.write_text(
+        json.dumps(report, indent=2, sort_keys=True), encoding="utf-8"
+    )
 
     manifest_path: Optional[Path] = None
     if consent_source:
@@ -185,7 +189,13 @@ def persist_report(
         entries.append(_index_entry(report_id, report))
         _write_index(entries)
 
-    return ReportPaths(report_id=report_id, base=report_dir, report_file=report_file, manifest_path=manifest_path, signature_path=signature_path)
+    return ReportPaths(
+        report_id=report_id,
+        base=report_dir,
+        report_file=report_file,
+        manifest_path=manifest_path,
+        signature_path=signature_path,
+    )
 
 
 __all__ = [
@@ -199,5 +209,3 @@ __all__ = [
     "compute_report_hash",
     "persist_report",
 ]
-
-

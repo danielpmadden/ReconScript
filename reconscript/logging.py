@@ -18,7 +18,9 @@ SENSITIVE_HEADERS = {"cookie", "set-cookie", "authorization", "proxy-authorizati
 class JsonFormatter(logging.Formatter):
     """Emit logs as structured JSON objects."""
 
-    def format(self, record: logging.LogRecord) -> str:  # pragma: no cover - straightforward structure
+    def format(
+        self, record: logging.LogRecord
+    ) -> str:  # pragma: no cover - straightforward structure
         payload = {
             "level": record.levelname,
             "message": record.getMessage(),
@@ -33,7 +35,9 @@ class JsonFormatter(logging.Formatter):
 class SensitiveDataFilter(logging.Filter):
     """Redact sensitive header values in structured arguments."""
 
-    def filter(self, record: logging.LogRecord) -> bool:  # pragma: no cover - deterministic behaviour
+    def filter(
+        self, record: logging.LogRecord
+    ) -> bool:  # pragma: no cover - deterministic behaviour
         if isinstance(record.args, dict):
             sanitized = {}
             for key, value in record.args.items():
@@ -90,12 +94,12 @@ def configure_logging(
         if json_logs:
             file_handler.setFormatter(JsonFormatter())
         else:
-            file_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+            file_handler.setFormatter(
+                logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+            )
         handlers.append(file_handler)
 
     logging.basicConfig(level=level, handlers=handlers, force=True)
 
     for name in suppress or ("werkzeug", "urllib3", "PIL"):
         logging.getLogger(name).setLevel(max(level, logging.WARNING))
-
-
