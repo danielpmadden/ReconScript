@@ -157,7 +157,9 @@ def run_recon(
                     "findings": [],
                 }
             )
-            embed_runtime_metadata(report, started_at, completed_at=started_at, duration=0.0)
+            embed_runtime_metadata(
+                report, started_at, completed_at=started_at, duration=0.0
+            )
             record_scan_completed(scope.target, 0.0, 0)
             REPORT_LOGGER.info(serialize_results(report))
             return report
@@ -170,7 +172,6 @@ def run_recon(
             evidence_level=evidence_level,
             redaction_keys=redactions,
         )
-<<<<<<< HEAD
 
         http_host = _hostname_for_requests(scope, hostname)
         started_clock = time.perf_counter()
@@ -225,13 +226,10 @@ def run_recon(
 
         completed_at = datetime.now(timezone.utc)
         duration = time.perf_counter() - started_clock
-        embed_runtime_metadata(report, started_at, completed_at=completed_at, duration=duration)
-        record_scan_completed(scope.target, duration, len(open_ports))
-=======
         embed_runtime_metadata(
-            report, started_at, completed_at=started_at, duration=0.0
+            report, started_at, completed_at=completed_at, duration=duration
         )
->>>>>>> 74be2f0 (style: fix reporters.py syntax and apply Black formatting)
+        record_scan_completed(scope.target, duration, len(open_ports))
         REPORT_LOGGER.info(serialize_results(report))
 
         if progress_callback:
@@ -250,54 +248,6 @@ def run_recon(
     finally:
         if failure_reason is not None:
             record_scan_failed(target, failure_reason)
-
-
-<<<<<<< HEAD
-=======
-    http_host = _hostname_for_requests(scope, hostname)
-
-    started_clock = time.perf_counter()
-
-    if progress_callback:
-        progress_callback("Starting TCP connect scan", 0.1)
-    open_ports = tcp_connect_scan(config, bucket)
-    report["open_ports"] = open_ports
-
-    http_results: dict[int, dict[str, object]] = {}
-    if open_ports:
-        if progress_callback:
-            progress_callback("Collecting HTTP metadata", 0.4)
-        http_results = http_probe_services(config, http_host, open_ports)
-    report["http_checks"] = http_results
-
-    tls_details = None
-    if any(port in (443, 8443) for port in open_ports):
-        if progress_callback:
-            progress_callback("Retrieving TLS certificates", 0.6)
-        tls_port = 443 if 443 in open_ports else 8443
-        tls_details = fetch_tls_certificate(config, tls_port)
-    report["tls_cert"] = tls_details
-
-    if progress_callback:
-        progress_callback("Fetching robots.txt", 0.75)
-    report["robots"] = fetch_robots(config, http_host)
-
-    if progress_callback:
-        progress_callback("Generating findings", 0.9)
-    report["findings"] = generate_findings(http_results)
-
-    completed_at = datetime.now(timezone.utc)
-    duration = time.perf_counter() - started_clock
-    embed_runtime_metadata(
-        report, started_at, completed_at=completed_at, duration=duration
-    )
-    REPORT_LOGGER.info(serialize_results(report))
-
-    if progress_callback:
-        progress_callback("Reconnaissance complete", 1.0)
-
-    return report
->>>>>>> 74be2f0 (style: fix reporters.py syntax and apply Black formatting)
 
 
 __all__ = [

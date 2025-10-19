@@ -184,7 +184,9 @@ def _build_markdown_context(data: Dict[str, object]) -> Dict[str, Any]:
         "ports": _format_list(data.get("ports", [])) or "None",
         "open_ports": _format_list(data.get("open_ports", [])) or "None detected",
         "findings": findings if isinstance(findings, Sequence) else [],
-        "recommendations": _build_recommendations(findings if isinstance(findings, Sequence) else []),
+        "recommendations": _build_recommendations(
+            findings if isinstance(findings, Sequence) else []
+        ),
         "version": data.get("version", __version__),
         "runtime": data.get("runtime", {}),
     }
@@ -207,7 +209,11 @@ def _render_markdown_sections(context: Dict[str, Any]) -> List[str]:
     if findings:
         for item in findings:
             port = item.get("port", "n/a") if isinstance(item, dict) else "n/a"
-            issue = item.get("issue", "observation") if isinstance(item, dict) else str(item)
+            issue = (
+                item.get("issue", "observation")
+                if isinstance(item, dict)
+                else str(item)
+            )
             lines.append(f"- Port `{port}` — `{issue}`")
             if isinstance(item, dict) and item.get("details") is not None:
                 details = item["details"]

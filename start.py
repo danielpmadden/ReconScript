@@ -237,7 +237,11 @@ def main() -> None:
         )
 
     python_executable = Path(sys.executable)
-    bootstrap_requested = os.environ.get("RECONSCRIPT_BOOTSTRAP", "").lower() in {"1", "true", "yes"}
+    bootstrap_requested = os.environ.get("RECONSCRIPT_BOOTSTRAP", "").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
     if bootstrap_requested:
         try:
             install_dependencies(python_executable, console=console)

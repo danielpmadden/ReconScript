@@ -48,7 +48,6 @@ class StaticUser(UserMixin):
         self.role = role
 
 
-<<<<<<< HEAD
 def _allow_dev_secrets() -> bool:
     return os.environ.get("ALLOW_DEV_SECRETS", "false").lower() == "true"
 
@@ -56,13 +55,9 @@ def _allow_dev_secrets() -> bool:
 def _enforce_secret_path(path: Path, *, env_var: str) -> Path:
     resolved = path.expanduser().resolve()
     if not resolved.exists():
-        raise RuntimeError(f"{env_var} must point to an existing file (got {resolved}).")
-=======
-def _load_secret_key() -> bytes:
-    secret_path = Path(
-        os.environ.get("FLASK_SECRET_KEY_FILE", "keys/dev_flask_secret.key")
-    )
->>>>>>> 74be2f0 (style: fix reporters.py syntax and apply Black formatting)
+        raise RuntimeError(
+            f"{env_var} must point to an existing file (got {resolved})."
+        )
     try:
         if DEV_KEYS_DIR in resolved.parents and not _allow_dev_secrets():
             raise RuntimeError(
@@ -81,20 +76,18 @@ def _load_secret_key() -> bytes:
         raise RuntimeError(
             "FLASK_SECRET_KEY_FILE environment variable must reference a secure secret key file."
         )
-    secret_path = _enforce_secret_path(Path(secret_env), env_var="FLASK_SECRET_KEY_FILE")
+    secret_path = _enforce_secret_path(
+        Path(secret_env), env_var="FLASK_SECRET_KEY_FILE"
+    )
     try:
         secret = secret_path.read_bytes().strip()
     except OSError as exc:
-<<<<<<< HEAD
-        raise RuntimeError(f"Unable to read Flask secret key from {secret_path}: {exc}") from exc
-    if not secret:
-        raise RuntimeError(f"Secret key file {secret_path} is empty.")
-    return secret
-=======
         raise RuntimeError(
             f"Unable to read Flask secret key from {secret_path}: {exc}"
         ) from exc
->>>>>>> 74be2f0 (style: fix reporters.py syntax and apply Black formatting)
+    if not secret:
+        raise RuntimeError(f"Secret key file {secret_path} is empty.")
+    return secret
 
 
 def _rbac_required(role: str):
@@ -119,9 +112,13 @@ def _load_user_credentials() -> tuple[str, str]:
     username = os.environ.get("ADMIN_USER", "").strip()
     password = os.environ.get("ADMIN_PASSWORD", "").strip()
     if not username or not password:
-        raise RuntimeError("ADMIN_USER and ADMIN_PASSWORD must be set for the ReconScript UI.")
+        raise RuntimeError(
+            "ADMIN_USER and ADMIN_PASSWORD must be set for the ReconScript UI."
+        )
     if not _allow_dev_secrets() and (username == "admin" or password == "changeme"):
-        raise RuntimeError("Default credentials are not permitted. Set strong ADMIN_USER and ADMIN_PASSWORD values.")
+        raise RuntimeError(
+            "Default credentials are not permitted. Set strong ADMIN_USER and ADMIN_PASSWORD values."
+        )
     if len(password) < 12 and not _allow_dev_secrets():
         raise RuntimeError("ADMIN_PASSWORD must be at least 12 characters long.")
     return username, password
@@ -191,7 +188,12 @@ def create_app() -> Flask:
             submitted_pass = request.form.get("password", "")
             LOGGER.info(
                 "ui.login.attempt",
-                extra={"event": "ui.login.attempt", "username": submitted_user, "success": submitted_user == username and submitted_pass == password},
+                extra={
+                    "event": "ui.login.attempt",
+                    "username": submitted_user,
+                    "success": submitted_user == username
+                    and submitted_pass == password,
+                },
             )
             if submitted_user == username and submitted_pass == password:
                 login_user(user)
@@ -242,7 +244,14 @@ def create_app() -> Flask:
                 flash(f"Consent manifest invalid: {exc}", "error")
                 if consent_path:
                     consent_path.unlink(missing_ok=True)
-                LOGGER.warning("ui.consent.invalid", extra={"event": "ui.consent.invalid", "target": target, "error": str(exc)})
+                LOGGER.warning(
+                    "ui.consent.invalid",
+                    extra={
+                        "event": "ui.consent.invalid",
+                        "target": target,
+                        "error": str(exc),
+                    },
+                )
                 return render_template("index.html")
 
             try:
@@ -269,7 +278,14 @@ def create_app() -> Flask:
                 flash(str(exc), "error")
                 if consent_path:
                     consent_path.unlink(missing_ok=True)
-                LOGGER.error("ui.scan.failed", extra={"event": "ui.scan.failed", "target": target, "error": str(exc)})
+                LOGGER.error(
+                    "ui.scan.failed",
+                    extra={
+                        "event": "ui.scan.failed",
+                        "target": target,
+                        "error": str(exc),
+                    },
+                )
                 return render_template("index.html")
 
             persisted = persist_report(report, consent_source=consent_path, sign=False)

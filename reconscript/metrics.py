@@ -22,6 +22,7 @@ except Exception:  # pragma: no cover - fall back to no-op metrics
     def generate_latest(_: object) -> bytes:  # type: ignore[override]
         return b""
 
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -45,11 +46,15 @@ def _histogram(name: str, documentation: str, *, buckets: Iterable[float]):
     return Histogram(name, documentation, buckets=buckets, registry=_REGISTRY)
 
 
-def _counter(name: str, documentation: str, *, label_names: Optional[Iterable[str]] = None):
+def _counter(
+    name: str, documentation: str, *, label_names: Optional[Iterable[str]] = None
+):
     if Counter is None or _REGISTRY is None:  # pragma: no cover - optional dependency
         return _NoopMetric()
     if label_names:
-        return Counter(name, documentation, labelnames=list(label_names), registry=_REGISTRY)
+        return Counter(
+            name, documentation, labelnames=list(label_names), registry=_REGISTRY
+        )
     return Counter(name, documentation, registry=_REGISTRY)
 
 
@@ -73,7 +78,9 @@ OPEN_PORTS = _histogram(
 def record_scan_started(target: str) -> None:
     """Emit a metrics event for a scan attempt."""
 
-    LOGGER.debug("metrics.scan_started", extra={"event": "scan.started", "target": target})
+    LOGGER.debug(
+        "metrics.scan_started", extra={"event": "scan.started", "target": target}
+    )
     SCAN_ATTEMPTS.labels(status="started").inc()
 
 
