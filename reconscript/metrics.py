@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 import logging
-from typing import Iterable, Optional
+from collections.abc import Iterable
 
 try:  # pragma: no cover - optional dependency handling
     from prometheus_client import (  # type: ignore
+        CONTENT_TYPE_LATEST,
         CollectorRegistry,
         Counter,
         Histogram,
         generate_latest,
     )
-    from prometheus_client import CONTENT_TYPE_LATEST
 except Exception:  # pragma: no cover - fall back to no-op metrics
     CollectorRegistry = None  # type: ignore[assignment]
     Counter = None  # type: ignore[assignment]
@@ -22,6 +22,7 @@ except Exception:  # pragma: no cover - fall back to no-op metrics
     def generate_latest(_: object) -> bytes:  # type: ignore[override]
         return b""
 
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -29,7 +30,7 @@ class _NoopMetric:
     def observe(self, *_: object, **__: object) -> None:
         return None
 
-    def labels(self, *_: object, **__: object) -> "_NoopMetric":
+    def labels(self, *_: object, **__: object) -> _NoopMetric:
         return self
 
     def inc(self, *_: object, **__: object) -> None:
@@ -45,11 +46,15 @@ def _histogram(name: str, documentation: str, *, buckets: Iterable[float]):
     return Histogram(name, documentation, buckets=buckets, registry=_REGISTRY)
 
 
-def _counter(name: str, documentation: str, *, label_names: Optional[Iterable[str]] = None):
+def _counter(
+    name: str, documentation: str, *, label_names: Iterable[str] | None = None
+):
     if Counter is None or _REGISTRY is None:  # pragma: no cover - optional dependency
         return _NoopMetric()
     if label_names:
-        return Counter(name, documentation, labelnames=list(label_names), registry=_REGISTRY)
+        return Counter(
+            name, documentation, labelnames=list(label_names), registry=_REGISTRY
+        )
     return Counter(name, documentation, registry=_REGISTRY)
 
 
@@ -73,7 +78,9 @@ OPEN_PORTS = _histogram(
 def record_scan_started(target: str) -> None:
     """Emit a metrics event for a scan attempt."""
 
-    LOGGER.debug("metrics.scan_started", extra={"event": "scan.started", "target": target})
+    LOGGER.debug(
+        "metrics.scan_started", extra={"event": "scan.started", "target": target}
+    )
     SCAN_ATTEMPTS.labels(status="started").inc()
 
 

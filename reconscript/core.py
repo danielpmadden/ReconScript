@@ -3,20 +3,14 @@
 from __future__ import annotations
 
 import logging
-import os
 import time
+from collections.abc import Callable, Iterable, Sequence
 from datetime import datetime, timezone
-from typing import Iterable, Optional, Sequence
 
 from . import __version__
 from .consent import ConsentManifest
-from .metrics import (
-    record_scan_completed,
-    record_scan_failed,
-    record_scan_started,
-)
+from .metrics import record_scan_completed, record_scan_failed, record_scan_started
 from .report import embed_runtime_metadata
-from .scope import ScopeValidation, ScopeError, ensure_within_allowlist, validate_target
 from .scanner import (
     DEFAULT_PORTS,
     REDACTION_KEYS,
@@ -33,17 +27,19 @@ from .scanner import (
     validate_port_list,
 )
 from .scanner.throttle import TokenBucket
+from .scope import ScopeError, ScopeValidation, ensure_within_allowlist, validate_target
 
 LOGGER = logging.getLogger(__name__)
 REPORT_LOGGER = logging.getLogger("reconscript.report")
 
 EVIDENCE_LEVELS = {"low", "medium", "high"}
 
+
 class ReconError(RuntimeError):
     """Raised when a scan cannot proceed."""
 
 
-def _determine_redactions(extra: Optional[Iterable[str]]) -> set[str]:
+def _determine_redactions(extra: Iterable[str] | None) -> set[str]:
     redactions = set(REDACTION_KEYS)
     for item in extra or []:
         redactions.add(str(item).lower())
@@ -64,13 +60,17 @@ def _validate_consent(
     if manifest.target not in {target.target, target.resolved_ip or ""}:
         raise ReconError("Consent manifest target does not match the requested target.")
     if evidence_level == "high" and manifest.evidence_level != "high":
-        raise ReconError("High evidence level requires a manifest authorising high evidence collection.")
+        raise ReconError(
+            "High evidence level requires a manifest authorising high evidence collection."
+        )
     if any(port not in manifest.allowed_ports for port in requested_ports):
-        raise ReconError("Requested ports exceed the approved scope in the consent manifest.")
+        raise ReconError(
+            "Requested ports exceed the approved scope in the consent manifest."
+        )
     return manifest
 
 
-def _hostname_for_requests(scope: ScopeValidation, override: Optional[str]) -> str:
+def _hostname_for_requests(scope: ScopeValidation, override: str | None) -> str:
     if override:
         return override
     if scope.kind == "hostname":
@@ -81,15 +81,15 @@ def _hostname_for_requests(scope: ScopeValidation, override: Optional[str]) -> s
 def run_recon(
     *,
     target: str,
-    hostname: Optional[str] = None,
-    ports: Optional[Sequence[int]] = None,
-    expected_ip: Optional[str] = None,
+    hostname: str | None = None,
+    ports: Sequence[int] | None = None,
+    expected_ip: str | None = None,
     enable_ipv6: bool = False,
     dry_run: bool = False,
     evidence_level: str = "low",
     consent_manifest: ConsentManifest | None = None,
-    extra_redactions: Optional[Iterable[str]] = None,
-    progress_callback: Optional[callable] = None,
+    extra_redactions: Iterable[str] | None = None,
+    progress_callback: Callable[[str, float], None] | None = None,
 ) -> dict[str, object]:
     """Execute the ReconScript workflow with safety controls."""
 
@@ -152,7 +152,9 @@ def run_recon(
                     "findings": [],
                 }
             )
-            embed_runtime_metadata(report, started_at, completed_at=started_at, duration=0.0)
+            embed_runtime_metadata(
+                report, started_at, completed_at=started_at, duration=0.0
+            )
             record_scan_completed(scope.target, 0.0, 0)
             REPORT_LOGGER.info(serialize_results(report))
             return report
@@ -219,7 +221,9 @@ def run_recon(
 
         completed_at = datetime.now(timezone.utc)
         duration = time.perf_counter() - started_clock
-        embed_runtime_metadata(report, started_at, completed_at=completed_at, duration=duration)
+        embed_runtime_metadata(
+            report, started_at, completed_at=completed_at, duration=duration
+        )
         record_scan_completed(scope.target, duration, len(open_ports))
         REPORT_LOGGER.info(serialize_results(report))
 
@@ -241,12 +245,8 @@ def run_recon(
             record_scan_failed(target, failure_reason)
 
 
-
-
 __all__ = [
     "run_recon",
     "ReconError",
     "check_security_headers",
 ]
-
-
