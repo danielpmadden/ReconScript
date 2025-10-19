@@ -22,7 +22,9 @@ def _write_manifest(tmp_path: Path, body: dict) -> Path:
     signed = signing_key.sign(_canonical(body)).signature
     payload = {**body, "signature": base64.b64encode(signed).decode("ascii")}
     manifest_path = tmp_path / "manifest.json"
-    manifest_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    manifest_path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8"
+    )
     return manifest_path
 
 

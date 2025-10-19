@@ -8,7 +8,7 @@ import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 from nacl import exceptions as nacl_exceptions
 from nacl.signing import SigningKey, VerifyKey
@@ -61,7 +61,7 @@ def _parse_iso8601(value: str) -> datetime:
     return parsed.astimezone(timezone.utc)
 
 
-def _canonical_json(data: Dict[str, Any]) -> bytes:
+def _canonical_json(data: dict[str, Any]) -> bytes:
     return json.dumps(data, separators=(",", ":"), sort_keys=True).encode("utf-8")
 
 
@@ -72,16 +72,15 @@ def _allow_dev_secrets() -> bool:
 def _guard_key_path(path: Path, *, env_var: str) -> Path:
     resolved = path.expanduser().resolve()
     if not resolved.exists():
-        raise ConsentError(f"{env_var} must point to an existing file (got {resolved}).")
-    try:
-        if DEV_KEYS_DIR in resolved.parents and not _allow_dev_secrets():
-            raise ConsentError(
-                f"{env_var} references developer sample keys. Provide production keys or set ALLOW_DEV_SECRETS=true for local testing."
-            )
-    except ConsentError:
-        raise
-    except Exception:
-        pass
+        raise ConsentError(
+            f"{env_var} must point to an existing file (got {resolved})."
+        )
+    if DEV_KEYS_DIR in resolved.parents and not _allow_dev_secrets():
+        message = (
+            f"{env_var} references developer sample keys. "
+            "Provide production keys or set ALLOW_DEV_SECRETS=true for local testing."
+        )
+        raise ConsentError(message)
     return resolved
 
 
@@ -103,12 +102,14 @@ def _load_private_key(path: Path) -> SigningKey:
     return SigningKey(raw)
 
 
-def _resolve_key_path(provided: Optional[Path], env_var: str) -> Path:
+def _resolve_key_path(provided: Path | None, env_var: str) -> Path:
     if provided is not None:
         return _guard_key_path(provided, env_var=env_var)
     env_value = os.environ.get(env_var)
     if not env_value:
-        raise ConsentError(f"{env_var} must be set to the path of the authorised signing key.")
+        raise ConsentError(
+            f"{env_var} must be set to the path of the authorised signing key."
+        )
     return _guard_key_path(Path(env_value), env_var=env_var)
 
 
@@ -136,12 +137,16 @@ def load_manifest(path: Path | str) -> ConsentManifest:
         raise ConsentError(f"Manifest missing required fields: {', '.join(missing)}")
 
     allowed_ports = payload.get("allowed_ports")
-    if not isinstance(allowed_ports, list) or not all(isinstance(p, int) for p in allowed_ports):
+    if not isinstance(allowed_ports, list) or not all(
+        isinstance(p, int) for p in allowed_ports
+    ):
         raise ConsentError("allowed_ports must be a list of integers.")
 
     evidence_level = payload.get("evidence_level")
     if evidence_level is not None and evidence_level not in {"low", "medium", "high"}:
-        raise ConsentError("evidence_level must be one of low, medium, or high when provided.")
+        raise ConsentError(
+            "evidence_level must be one of low, medium, or high when provided."
+        )
 
     manifest = ConsentManifest(
         owner_name=str(payload["owner_name"]).strip(),
@@ -156,7 +161,9 @@ def load_manifest(path: Path | str) -> ConsentManifest:
     return manifest
 
 
-def validate_manifest(manifest: ConsentManifest, *, public_key_path: Optional[Path] = None) -> ConsentValidationResult:
+def validate_manifest(
+    manifest: ConsentManifest, *, public_key_path: Path | None = None
+) -> ConsentValidationResult:
     key_path = _resolve_key_path(public_key_path, "CONSENT_PUBLIC_KEY_PATH")
     verify_key = _load_public_key(key_path)
 
@@ -165,8 +172,12 @@ def validate_manifest(manifest: ConsentManifest, *, public_key_path: Optional[Pa
         "owner_email": manifest.owner_email,
         "target": manifest.target,
         "allowed_ports": manifest.allowed_ports,
-        "valid_from": manifest.valid_from.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z"),
-        "valid_until": manifest.valid_until.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z"),
+        "valid_from": manifest.valid_from.replace(tzinfo=timezone.utc)
+        .isoformat()
+        .replace("+00:00", "Z"),
+        "valid_until": manifest.valid_until.replace(tzinfo=timezone.utc)
+        .isoformat()
+        .replace("+00:00", "Z"),
     }
     if manifest.evidence_level:
         body["evidence_level"] = manifest.evidence_level
@@ -183,16 +194,18 @@ def validate_manifest(manifest: ConsentManifest, *, public_key_path: Optional[Pa
 
     now = datetime.now(timezone.utc)
     if manifest.valid_from > now or manifest.valid_until < now:
-        raise ConsentError("Consent manifest is not currently valid based on validity window.")
+        raise ConsentError(
+            "Consent manifest is not currently valid based on validity window."
+        )
 
     return ConsentValidationResult(manifest=manifest, verify_key=verify_key)
 
 
-def sign_report_hash(report_hash: str, *, private_key_path: Optional[Path] = None) -> bytes:
+def sign_report_hash(
+    report_hash: str, *, private_key_path: Path | None = None
+) -> bytes:
     key_path = _resolve_key_path(private_key_path, "REPORT_SIGNING_KEY_PATH")
     signing_key = _load_private_key(key_path)
     message = report_hash.encode("utf-8")
     signed = signing_key.sign(message)
     return signed.signature
-
-

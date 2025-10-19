@@ -1,40 +1,35 @@
 #!/usr/bin/env python3
-from __future__ import annotations
-
 """Helper script to ensure ReconScript runtime dependencies are installed."""
+
+from __future__ import annotations
 
 import argparse
 import hashlib
 import importlib
+import logging
 import subprocess
 import sys
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Dict, Iterable
 
 ROOT = Path(__file__).resolve().parent
 REQUIREMENTS_FILE = ROOT / "requirements.txt"
 MARKER_IN_VENV = ROOT / ".venv" / ".requirements-hash"
 MARKER_FALLBACK = ROOT / ".requirements-hash"
 
+logger = logging.getLogger(__name__)
+
 # Mapping of requirement name to import name so we can detect missing modules quickly.
-REQUIREMENT_IMPORTS: Dict[str, str] = {
+REQUIREMENT_IMPORTS: dict[str, str] = {
+    "flask": "flask",
+    "flask-login": "flask_login",
+    "jinja2": "jinja2",
     "requests": "requests",
     "urllib3": "urllib3",
-    "jinja2": "jinja2",
-    "flask": "flask",
-    "rich": "rich",
-    "tabulate": "tabulate",
-    "colorama": "colorama",
-    "weasyprint": "weasyprint",
-    "fonttools": "fontTools",
-    "tinycss2": "tinycss2",
-    "cssselect2": "cssselect2",
-    "pyphen": "pyphen",
-    "pydyf": "pydyf",
-    "markupsafe": "markupsafe",
-    "itsdangerous": "itsdangerous",
-    "werkzeug": "werkzeug",
     "python-dotenv": "dotenv",
+    "rich": "rich",
+    "prometheus-client": "prometheus_client",
+    "pynacl": "nacl",
 }
 
 
@@ -46,6 +41,7 @@ def create_console():  # type: ignore[return-value]
 
         return Console(highlight=False)
     except Exception:
+        logger.exception("Rich console import failed; falling back to plain console")
 
         class _PlainConsole:
             def print(self, *values: object, sep: str = " ", end: str = "\n") -> None:
@@ -73,11 +69,11 @@ def _marker_path() -> Path:
     return MARKER_FALLBACK
 
 
-def _missing_modules(modules: Dict[str, str]) -> Iterable[str]:
+def _missing_modules(modules: dict[str, str]) -> Iterable[str]:
     for requirement, module_name in modules.items():
         try:
             importlib.import_module(module_name)
-        except Exception:
+        except ImportError:
             yield requirement
 
 
@@ -103,7 +99,9 @@ def install_dependencies(
 
     missing = list(_missing_modules(REQUIREMENT_IMPORTS))
     if missing:
-        output.print(f"Installing missing dependencies: {', '.join(sorted(set(missing)))} …")
+        output.print(
+            f"Installing missing dependencies: {', '.join(sorted(set(missing)))} …"
+        )
 
     if force:
         output.print("Force flag supplied — reinstalling requirements…")
@@ -121,9 +119,13 @@ def install_dependencies(
             str(requirements),
         ]
         output.print("Resolving Python requirements (this may take a moment)…")
-        result = subprocess.run(command, capture_output=True, text=True)
+        result = subprocess.run(  # noqa: S603 - command is constructed from trusted constants
+            command, capture_output=True, text=True
+        )
         if result.returncode != 0:
-            combined_output = "\n".join(part for part in (result.stdout, result.stderr) if part)
+            combined_output = "\n".join(
+                part for part in (result.stdout, result.stderr) if part
+            )
             raise RuntimeError(
                 "Dependency installation failed with exit code"
                 f" {result.returncode}:\n{combined_output or '(no output)'}"
@@ -136,7 +138,9 @@ def install_dependencies(
 
 
 def _parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Install ReconScript runtime dependencies.")
+    parser = argparse.ArgumentParser(
+        description="Install ReconScript runtime dependencies."
+    )
     parser.add_argument(
         "--python",
         dest="python",
@@ -161,10 +165,12 @@ def main(argv: Iterable[str] | None = None) -> None:
     args = _parse_args(argv)
     console = create_console()
     try:
-        install_dependencies(args.python, args.requirements, force=args.force, console=console)
+        install_dependencies(
+            args.python, args.requirements, force=args.force, console=console
+        )
     except Exception as exc:  # pragma: no cover - invoked from CLI
         console.print(f"[red]Failed to install dependencies: {exc}[/red]")
-        raise SystemExit(1)
+        raise SystemExit(1) from exc
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entrypoint

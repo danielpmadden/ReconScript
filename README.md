@@ -47,9 +47,12 @@ export ADMIN_USER=security-admin
 export ADMIN_PASSWORD='replace-with-strong-passphrase'
 export CONSENT_PUBLIC_KEY_PATH=/secure/path/consent_ed25519.pub
 export REPORT_SIGNING_KEY_PATH=/secure/path/report_ed25519.priv
-python start.py
+# Optional: ask the launcher to install Python requirements before starting
+RECONSCRIPT_BOOTSTRAP=1 python start.py
 ```
-The launcher checks dependencies, loads environment variables from `.env` if present, and starts the Flask server on <http://127.0.0.1:5000>. Use `start.sh`, `start.bat`, or `start.ps1` for platform-specific wrappers. Set `ALLOW_DEV_SECRETS=true` only for local demos that intentionally reuse the sample keys in `keys/`.
+Copy `.env.example` to `.env` for local development; it enables `ALLOW_DEV_SECRETS=true`, sets placeholder credentials (`changeme_admin` / `changeme_password`), and points to the developer keys under `keys/`. **Always replace these values before deploying to shared environments.**
+
+The launcher loads environment variables from `.env` if present and starts the Flask server on <http://127.0.0.1:5000>. Use `start.sh`, `start.bat`, or `start.ps1` for platform-specific wrappers. Leave `RECONSCRIPT_BOOTSTRAP` unset (or `false`) when running in offline environments that already have dependencies installed.
 
 ### Run a CLI Scan
 ```bash
@@ -65,6 +68,21 @@ docker compose up --build
 ```
 
 Mount the `results/` directory when running containers so generated artefacts persist outside the container lifecycle. Override the required secrets via environment variables or secrets managers at runtime; the container image omits the developer keys unless built with `--build-arg INCLUDE_DEV_KEYS=true`.
+
+### Offline / Air-gapped builds
+
+Prepare wheels on a connected machine and bake them into the Docker image for offline deployments:
+
+```bash
+# On a connected host
+python -m pip install --upgrade pip
+python -m pip wheel -r requirements.txt -w wheelhouse
+
+# Build using the cached wheels
+docker build --build-arg WHEELHOUSE=wheelhouse -t reconscript-offline .
+```
+
+The Dockerfile automatically points `pip` at `/opt/wheelhouse` via `PIP_FIND_LINKS`. Place custom wheels inside the local `wheelhouse/` directory (a `.gitkeep` placeholder is tracked so the folder is present in the build context).
 
 ### Observability
 ReconScript exposes Prometheus-compatible metrics at `/metrics` and a readiness probe at `/healthz`. Scrape the metrics endpoint to monitor scan durations, completion counts, and open-port histograms.
