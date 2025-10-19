@@ -7,5 +7,29 @@ services:
       - "5000:5000"
     volumes:
       - ./results:/app/results
+    env_file:
+      - .env
     environment:
-      - SERVER_NAME=127.0.0.1:5000
+      SERVER_NAME: ${SERVER_NAME:-127.0.0.1:5000}
+      ADMIN_USER: ${ADMIN_USER:-changeme_admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-changeme_password}
+      FLASK_SECRET_KEY_FILE: ${FLASK_SECRET_KEY_FILE:-/run/secrets/flask_secret}
+      CONSENT_PUBLIC_KEY_PATH: ${CONSENT_PUBLIC_KEY_PATH:-/run/secrets/consent_key}
+      REPORT_SIGNING_KEY_PATH: ${REPORT_SIGNING_KEY_PATH:-/run/secrets/report_key}
+    secrets:
+      - flask_secret
+      - consent_key
+      - report_key
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:5000/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+secrets:
+  flask_secret:
+    file: ./keys/dev_flask_secret.key
+  consent_key:
+    file: ./keys/dev_ed25519.pub
+  report_key:
+    file: ./keys/dev_ed25519.priv

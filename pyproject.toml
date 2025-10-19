@@ -28,14 +28,15 @@ classifiers = [
 ]
 
 dependencies = [
-  "Flask==3.0.3",
-  "Flask-Login==0.6.3",
-  "Jinja2==3.1.4",
-  "requests==2.32.3",
-  "urllib3==2.2.3",
-  "python-dotenv==1.0.1",
-  "rich==13.7.1",
-  "PyNaCl==1.5.0",
+  "Flask>=3.0",
+  "Flask-Login>=0.6",
+  "Jinja2>=3.1",
+  "requests>=2.31",
+  "urllib3>=2.2",
+  "python-dotenv>=1.0",
+  "rich>=13.7",
+  "prometheus-client>=0.19",
+  "PyNaCl>=1.5",
 ]
 
 [project.optional-dependencies]

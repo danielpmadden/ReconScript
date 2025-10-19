@@ -2,13 +2,18 @@
 
 FROM python:3.12-slim AS builder
 
+ARG WHEELHOUSE=wheelhouse
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_FIND_LINKS=/opt/wheelhouse
 
 WORKDIR /app
 
 ARG INCLUDE_DEV_KEYS=false
 
+COPY ${WHEELHOUSE}/ /opt/wheelhouse/
 COPY requirements.txt ./
 
 RUN python -m venv /opt/venv \
@@ -16,6 +21,8 @@ RUN python -m venv /opt/venv \
     && /opt/venv/bin/pip install --no-cache-dir -r requirements.txt
 
 FROM python:3.12-slim AS runtime
+
+ARG WHEELHOUSE=wheelhouse
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -39,6 +46,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && adduser --disabled-password --gecos "" reconscript
 
+COPY --from=builder /opt/wheelhouse /opt/wheelhouse
 COPY --from=builder /opt/venv /opt/venv
 COPY . .
 

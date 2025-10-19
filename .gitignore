@@ -207,8 +207,6 @@ marimo/_lsp/
 __marimo__/
 
 # ReconScript artifacts
-results/
-
 
 # Binary assets (keep placeholders only)
 *.png
@@ -220,3 +218,10 @@ results/
 *.tar
 *.gz
 *.mp4
+# reconscript: generated reports
+/results/*
+!/results/.gitkeep
+
+# Local wheel cache for offline Docker builds
+/wheelhouse/*
+!/wheelhouse/.gitkeep

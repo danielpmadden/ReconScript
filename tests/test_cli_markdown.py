@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from reconscript import cli, report as report_module
+from reconscript import cli
+from reconscript import report as report_module
 
 
 def test_cli_generates_markdown_report(tmp_path: Path, monkeypatch) -> None:
@@ -28,7 +29,9 @@ def test_cli_generates_markdown_report(tmp_path: Path, monkeypatch) -> None:
     assert report_dirs, "CLI should create a timestamped report directory"
     markdown_files = list(report_dirs[0].glob("report.*"))
     assert any(file.suffix in {".markdown", ".md"} for file in markdown_files)
-    markdown_path = next(file for file in markdown_files if file.suffix in {".markdown", ".md"})
+    markdown_path = next(
+        file for file in markdown_files if file.suffix in {".markdown", ".md"}
+    )
     content = markdown_path.read_text(encoding="utf-8")
     assert "## Findings" in content
     assert "## HTTP" in content
