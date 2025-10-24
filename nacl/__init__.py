@@ -3,10 +3,18 @@
 from .exceptions import BadSignatureError, CryptoError
 from .signing import SignedMessage, SigningKey, VerifyKey
 
+# Expose the ``exceptions`` module at the package level to match the
+# ``pynacl`` import style used by the application code (``from nacl import
+# exceptions``).  Our lightweight shim previously only re-exported the
+# classes, which meant importing the module itself failed with
+# ``ImportError`` when the real dependency was not installed.
+from . import exceptions as exceptions  # noqa: E402  (re-export for compatibility)
+
 __all__ = [
     "BadSignatureError",
     "CryptoError",
     "SignedMessage",
     "SigningKey",
     "VerifyKey",
+    "exceptions",
 ]
