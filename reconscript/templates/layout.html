@@ -38,7 +38,6 @@
         outline-offset: 2px;
       }
     </style>
-    <script defer src="{{ url_for('static', filename='js/consent.js') }}"></script>
   </head>
   <body>
     <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -47,12 +46,7 @@
         <strong>ReconScript</strong>
       </div>
       <nav aria-label="Primary">
-        {% if current_user.is_authenticated %}
-          <a href="{{ url_for('index') }}">Dashboard</a>
-          <a href="{{ url_for('logout') }}">Logout</a>
-        {% else %}
-          <a href="{{ url_for('login') }}">Login</a>
-        {% endif %}
+        <a href="{{ url_for('index') }}">Dashboard</a>
       </nav>
     </header>
     <main id="main-content" tabindex="-1">
@@ -70,6 +64,5 @@
       {% endwith %}
       {% block content %}{% endblock %}
     </main>
-    {% include 'consent_modal.html' %}
   </body>
 </html>
