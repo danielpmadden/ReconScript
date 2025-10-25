@@ -50,30 +50,6 @@ def _determine_redactions(extra: Iterable[str] | None) -> set[str]:
     return redactions
 
 
-def _validate_consent(
-    *,
-    manifest: ConsentManifest | None,
-    target: ScopeValidation,
-    requested_ports: Sequence[int],
-    evidence_level: str,
-) -> ConsentManifest | None:
-    if target.is_local:
-        return manifest
-    if manifest is None:
-        raise ReconError("Consent manifest is required for non-local targets.")
-    if manifest.target not in {target.target, target.resolved_ip or ""}:
-        raise ReconError("Consent manifest target does not match the requested target.")
-    if evidence_level == "high" and manifest.evidence_level != "high":
-        raise ReconError(
-            "High evidence level requires a manifest authorising high evidence collection."
-        )
-    if any(port not in manifest.allowed_ports for port in requested_ports):
-        raise ReconError(
-            "Requested ports exceed the approved scope in the consent manifest."
-        )
-    return manifest
-
-
 def _hostname_for_requests(scope: ScopeValidation, override: str | None) -> str:
     if override:
         return override
@@ -115,16 +91,7 @@ def run_recon(
             failure_reason = "port_validation_failed"
             raise
 
-        try:
-            manifest = _validate_consent(
-                manifest=consent_manifest,
-                target=scope,
-                requested_ports=port_list,
-                evidence_level=evidence_level,
-            )
-        except ReconError:
-            failure_reason = "consent_validation_failed"
-            raise
+        manifest = consent_manifest
 
         redactions = _determine_redactions(extra_redactions)
         bucket = TokenBucket(rate=TOKEN_RATE, capacity=TOKEN_CAPACITY)
