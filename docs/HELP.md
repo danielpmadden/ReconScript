@@ -10,7 +10,7 @@
 
 ## Configuration Tips
 - Copy `.env.example` to `.env` to override defaults.
-- Review the `keys/` directory and replace development keys before production usage.
+- Provision secrets using environment variables (see README) before production usage.
 - Use `requirements.txt` for runtime installs and `requirements-dev.txt` for local development tooling.
 
 ## Troubleshooting

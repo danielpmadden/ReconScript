@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, List, Optional
 
 
 @dataclass
@@ -33,7 +34,7 @@ class Response:
     headers: Dict[str, str]
     content: bytes
     request: Request
-    history: List["Response"] = field(default_factory=list)
+    history: List[Response] = field(default_factory=list)
     raw: object | None = None
 
     def __post_init__(self) -> None:

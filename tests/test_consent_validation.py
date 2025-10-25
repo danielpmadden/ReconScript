@@ -7,8 +7,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
-from nacl.signing import SigningKey
 
+from nacl.signing import SigningKey
 from reconscript.consent import ConsentError, load_manifest, validate_manifest
 
 

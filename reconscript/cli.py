@@ -5,8 +5,9 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Optional
 
 from . import __version__
 from .consent import ConsentError, ConsentManifest, load_manifest, validate_manifest

@@ -29,7 +29,6 @@ except (
 
 from install_dependencies import create_console, install_dependencies
 
-
 load_dotenv()
 
 ROOT = Path(__file__).resolve().parent

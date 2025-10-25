@@ -6,13 +6,11 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Sequence
 
 from nacl.signing import SigningKey
-
-DEFAULT_KEY = Path("keys/dev_ed25519.priv")
 
 
 def _canonical_json(data: dict) -> bytes:
@@ -41,7 +39,10 @@ def main() -> None:
         "--valid-days", type=int, default=7, help="Validity window in days"
     )
     parser.add_argument(
-        "--key", type=Path, default=DEFAULT_KEY, help="Path to ed25519 private key"
+        "--key",
+        type=Path,
+        required=True,
+        help="Path to ed25519 private key",
     )
     parser.add_argument(
         "--evidence-level", choices=("low", "medium", "high"), default="low"

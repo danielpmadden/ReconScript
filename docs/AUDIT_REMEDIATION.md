@@ -30,11 +30,10 @@ Each finding from the previous engineering audit is addressed below with the imp
 - **CI/Docs/Infra:** README references the matrix workflow; caching drastically shortens rerun latency.
 - **Risk reduction:** Speeds up reviews and reduces drift risk between lint/test definitions.
 
-## F-005 – Default UI credentials and Flask secret shipped in repo
-- **Root cause:** `_load_user_credentials` and `_load_secret_key` fell back to `admin/changeme` and `keys/dev_flask_secret.key`.
-- **Code-level fix:** Require `ADMIN_USER`, `ADMIN_PASSWORD`, and `FLASK_SECRET_KEY_FILE` to be set; block developer secrets unless `ALLOW_DEV_SECRETS=true`.
+- **Root cause:** `_load_user_credentials` and `_load_secret_key` fell back to `admin/changeme` and the bundled developer Flask secret.
+- **Code-level fix:** Require `ADMIN_USER`, `ADMIN_PASSWORD`, and `FLASK_SECRET_KEY` to be provided; reject developer secrets entirely.
 - **Tests added:** `tests/conftest.py` fixture seeds secure test-only values to exercise the stricter loaders.
-- **CI/Docs/Infra:** README/SECURITY guide operators through secret provisioning; Docker build removes developer keys by default.
+- **CI/Docs/Infra:** README/SECURITY guide operators through secret provisioning; developer secrets are no longer shipped.
 - **Risk reduction:** Eliminates trivial takeover paths by forcing strong credentials and unique Flask secrets.
 
 ## F-006 – Consent/report signing keys defaulted to bundled dev keys
@@ -79,9 +78,8 @@ Each finding from the previous engineering audit is addressed below with the imp
 - **CI/Docs/Infra:** Accessibility improvements captured in roadmap milestones.
 - **Risk reduction:** Improves UX for keyboard and screen-reader users, aligning with enterprise accessibility standards.
 
-## F-012 – Container image bundled secrets and lacked healthcheck
-- **Root cause:** Dockerfile copied `keys/` unconditionally and provided no runtime health signal.
-- **Code-level fix:** Added `INCLUDE_DEV_KEYS` build arg to strip sample keys by default and configured a Python-based `HEALTHCHECK` hitting `/healthz`.
+- **Root cause:** Dockerfile copied developer keys unconditionally and provided no runtime health signal.
+- **Code-level fix:** Removed developer keys from the repository entirely and configured a Python-based `HEALTHCHECK` hitting `/healthz`.
 - **Tests added:** Covered indirectly via CLI dry-run tests; integration tests planned for metrics and health endpoints.
 - **CI/Docs/Infra:** README instructs operators to pass secrets at runtime; Dockerfile change improves readiness reporting.
 - **Risk reduction:** Prevents accidental secret leakage in images and enables orchestrators to detect unhealthy containers.

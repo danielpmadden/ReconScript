@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 
 import pytest
+
 from nacl.signing import SigningKey
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -21,9 +22,7 @@ def _secure_defaults(monkeypatch, tmp_path):
     public_key_path.write_bytes(signing_key.verify_key.encode())
     monkeypatch.setenv("CONSENT_PUBLIC_KEY_PATH", str(public_key_path))
     monkeypatch.setenv("REPORT_SIGNING_KEY_PATH", str(private_key_path))
-    secret_key = tmp_path / "flask-secret.key"
-    secret_key.write_text("unit-test-secret", encoding="utf-8")
-    monkeypatch.setenv("FLASK_SECRET_KEY_FILE", str(secret_key))
+    monkeypatch.setenv("FLASK_SECRET_KEY", "unit-test-secret")
     monkeypatch.setenv("ADMIN_USER", "test-admin")
     monkeypatch.setenv("ADMIN_PASSWORD", "test-password-123")
     yield

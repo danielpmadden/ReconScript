@@ -9,10 +9,11 @@ import random
 import socket
 import ssl
 import time
+from collections.abc import Iterable, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from http.cookies import SimpleCookie, CookieError
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from http.cookies import CookieError, SimpleCookie
+from typing import Dict, List, Optional, Tuple
 
 import requests
 from requests import Response

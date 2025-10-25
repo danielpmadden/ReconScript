@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 # Modified by codex: 2024-05-08
-
 import html
 import json
 import logging
+from collections.abc import Iterable, Sequence
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 PROJECT_TEMPLATES = PACKAGE_DIR.parent / "templates"
@@ -184,7 +184,9 @@ def _build_markdown_context(data: Dict[str, object]) -> Dict[str, Any]:
         "ports": _format_list(data.get("ports", [])) or "None",
         "open_ports": _format_list(data.get("open_ports", [])) or "None detected",
         "findings": findings if isinstance(findings, Sequence) else [],
-        "recommendations": _build_recommendations(findings if isinstance(findings, Sequence) else []),
+        "recommendations": _build_recommendations(
+            findings if isinstance(findings, Sequence) else []
+        ),
         "version": data.get("version", __version__),
         "runtime": data.get("runtime", {}),
     }
@@ -207,7 +209,11 @@ def _render_markdown_sections(context: Dict[str, Any]) -> List[str]:
     if findings:
         for item in findings:
             port = item.get("port", "n/a") if isinstance(item, dict) else "n/a"
-            issue = item.get("issue", "observation") if isinstance(item, dict) else str(item)
+            issue = (
+                item.get("issue", "observation")
+                if isinstance(item, dict)
+                else str(item)
+            )
             lines.append(f"- Port `{port}` — `{issue}`")
             if isinstance(item, dict) and item.get("details") is not None:
                 details = item["details"]
