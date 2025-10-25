@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import uuid
 from pathlib import Path
 
 from flask import (
@@ -65,11 +66,21 @@ def _load_secret_key() -> bytes:
     return secret
 
 
+def _store_upload(file_storage) -> Path:
+    upload_dir = ensure_results_dir() / "uploads"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"manifest-{uuid.uuid4().hex}.json"
+    path = upload_dir / filename
+    file_storage.save(path)
+    return path
+
+
 def create_app() -> Flask:
     configure_logging()
 
     app = Flask(__name__)
     app.config["PUBLIC_UI"] = os.environ.get("ENABLE_PUBLIC_UI", "false").lower() == "true"
+    app.config["UPLOAD_FOLDER"] = str(ensure_results_dir() / "uploads")
     app.secret_key = _load_secret_key()
 
     @app.context_processor
@@ -89,6 +100,15 @@ def create_app() -> Flask:
             return Response("", status=204)
         return Response(payload, mimetype=content_type)
 
+    def _handle_manifest() -> tuple[Optional[Path], Optional[object]]:
+        file = request.files.get("consent_file")
+        if not file or not file.filename:
+            return None, None
+        temp_path = _store_upload(file)
+        manifest = load_manifest(temp_path)
+        validate_manifest(manifest)
+        return temp_path, manifest
+
     @app.route("/", methods=["GET", "POST"])
     def index():
         if request.method == "POST":
@@ -106,6 +126,24 @@ def create_app() -> Flask:
                 validate_target(target, expected_ip=expected_ip)
             except Exception as exc:
                 flash(str(exc), "error")
+                return render_template("index.html")
+
+            consent_path: Optional[Path] = None
+            consent_manifest = None
+            try:
+                consent_path, consent_manifest = _handle_manifest()
+            except ConsentError as exc:
+                flash(f"Consent manifest invalid: {exc}", "error")
+                if consent_path:
+                    consent_path.unlink(missing_ok=True)
+                LOGGER.warning(
+                    "ui.consent.invalid",
+                    extra={
+                        "event": "ui.consent.invalid",
+                        "target": target,
+                        "error": str(exc),
+                    },
+                )
                 return render_template("index.html")
 
             try:
@@ -129,6 +167,8 @@ def create_app() -> Flask:
                 )
             except ReconError as exc:
                 flash(str(exc), "error")
+                if consent_path:
+                    consent_path.unlink(missing_ok=True)
                 LOGGER.error(
                     "ui.scan.failed",
                     extra={
@@ -139,7 +179,11 @@ def create_app() -> Flask:
                 )
                 return render_template("index.html")
 
-            persisted = persist_report(report, sign=False)
+            persisted = persist_report(
+                report, consent_source=consent_path, sign=False
+            )
+            if consent_path:
+                consent_path.unlink(missing_ok=True)
             LOGGER.info(
                 "ui.scan.completed",
                 extra={
