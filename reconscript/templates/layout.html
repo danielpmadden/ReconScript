@@ -47,12 +47,7 @@
         <strong>ReconScript</strong>
       </div>
       <nav aria-label="Primary">
-        {% if current_user.is_authenticated %}
-          <a href="{{ url_for('index') }}">Dashboard</a>
-          <a href="{{ url_for('logout') }}">Logout</a>
-        {% else %}
-          <a href="{{ url_for('login') }}">Login</a>
-        {% endif %}
+        <a href="{{ url_for('index') }}">Dashboard</a>
       </nav>
     </header>
     <main id="main-content" tabindex="-1">
