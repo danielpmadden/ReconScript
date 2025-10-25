@@ -7,7 +7,6 @@ import logging
 import os
 import uuid
 from pathlib import Path
-from typing import Optional
 
 from flask import (
     Flask,
@@ -21,7 +20,6 @@ from flask import (
     url_for,
 )
 
-from .consent import ConsentError, load_manifest, validate_manifest
 from .core import ReconError, run_recon
 from .logging import configure_logging
 from .metrics import metrics_payload
@@ -166,7 +164,6 @@ def create_app() -> Flask:
                     ports=ports,
                     expected_ip=expected_ip,
                     evidence_level=evidence_level,
-                    consent_manifest=consent_manifest,
                 )
             except ReconError as exc:
                 flash(str(exc), "error")
