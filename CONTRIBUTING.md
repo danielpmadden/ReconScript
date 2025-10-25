@@ -6,7 +6,7 @@ Thank you for helping keep ReconScript safe, scoped, and respectful of consent.
 
 - Only contribute features that preserve read-only reconnaissance. Never add intrusive or destructive functionality.
 - All scans must remain single-target by default. CIDR support is opt-in via `ALLOW_CIDR=true`.
-- Non-local targets require a signed scope manifest and consent verification. Never ship production keys; use the dev keys in `keys/` for local testing only.
+- Non-local targets require a signed scope manifest and consent verification. Never ship production keys in the repository.
 - Evidence level defaults to `low`. `high` evidence must remain explicitly gated behind signed consent.
 - Do not expose the Flask UI publicly unless `ENABLE_PUBLIC_UI=true` **and** `ENABLE_RBAC=true` are set. The UI warns when public mode is active.
 

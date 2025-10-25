@@ -72,7 +72,9 @@ def _allow_dev_secrets() -> bool:
 def _guard_key_path(path: Path, *, env_var: str) -> Path:
     resolved = path.expanduser().resolve()
     if not resolved.exists():
-        raise ConsentError(f"{env_var} must point to an existing file (got {resolved}).")
+        raise ConsentError(
+            f"{env_var} must point to an existing file (got {resolved})."
+        )
     try:
         if DEV_KEYS_DIR in resolved.parents and not _allow_dev_secrets():
             raise ConsentError(
@@ -108,7 +110,9 @@ def _resolve_key_path(provided: Optional[Path], env_var: str) -> Path:
         return _guard_key_path(provided, env_var=env_var)
     env_value = os.environ.get(env_var)
     if not env_value:
-        raise ConsentError(f"{env_var} must be set to the path of the authorised signing key.")
+        raise ConsentError(
+            f"{env_var} must be set to the path of the authorised signing key."
+        )
     return _guard_key_path(Path(env_value), env_var=env_var)
 
 

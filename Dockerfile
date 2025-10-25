@@ -7,8 +7,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-ARG INCLUDE_DEV_KEYS=false
-
 COPY requirements.txt ./
 
 RUN python -m venv /opt/venv \
@@ -22,8 +20,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH="/opt/venv/bin:${PATH}"
 
 WORKDIR /app
-
-ARG INCLUDE_DEV_KEYS=false
 
 RUN apt-get update \
     && apt-get install --no-install-recommends -y \
@@ -42,8 +38,7 @@ RUN apt-get update \
 COPY --from=builder /opt/venv /opt/venv
 COPY . .
 
-RUN if [ "$INCLUDE_DEV_KEYS" != "true" ]; then rm -f keys/dev_*; fi \
-    && chown -R reconscript:reconscript /app
+RUN chown -R reconscript:reconscript /app
 
 USER reconscript
 

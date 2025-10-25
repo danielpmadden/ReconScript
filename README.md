@@ -42,14 +42,14 @@ python -m pip install -r requirements-dev.txt
 Before starting the Flask UI, generate deployment-specific secrets and point the application at them:
 
 ```bash
-export FLASK_SECRET_KEY_FILE=/secure/path/flask_secret.key
+export FLASK_SECRET_KEY="$(openssl rand -hex 32)"
 export ADMIN_USER=security-admin
 export ADMIN_PASSWORD='replace-with-strong-passphrase'
 export CONSENT_PUBLIC_KEY_PATH=/secure/path/consent_ed25519.pub
 export REPORT_SIGNING_KEY_PATH=/secure/path/report_ed25519.priv
 python start.py
 ```
-The launcher checks dependencies, loads environment variables from `.env` if present, and starts the Flask server on <http://127.0.0.1:5000>. Use `start.sh`, `start.bat`, or `start.ps1` for platform-specific wrappers. Set `ALLOW_DEV_SECRETS=true` only for local demos that intentionally reuse the sample keys in `keys/`.
+The launcher checks dependencies, loads environment variables from `.env` if present, and starts the Flask server on <http://127.0.0.1:5000>. Use `start.sh`, `start.bat`, or `start.ps1` for platform-specific wrappers.
 
 ### Run a CLI Scan
 ```bash
@@ -64,7 +64,7 @@ A Docker Compose definition is provided for isolated demonstrations:
 docker compose up --build
 ```
 
-Mount the `results/` directory when running containers so generated artefacts persist outside the container lifecycle. Override the required secrets via environment variables or secrets managers at runtime; the container image omits the developer keys unless built with `--build-arg INCLUDE_DEV_KEYS=true`.
+Mount the `results/` directory when running containers so generated artefacts persist outside the container lifecycle. Override the required secrets via environment variables or secrets managers at runtime.
 
 ### Observability
 ReconScript exposes Prometheus-compatible metrics at `/metrics` and a readiness probe at `/healthz`. Scrape the metrics endpoint to monitor scan durations, completion counts, and open-port histograms.

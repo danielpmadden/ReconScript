@@ -5,9 +5,10 @@ from __future__ import annotations
 import json
 import logging
 import os
+from collections.abc import Iterable
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Optional
 
 DEFAULT_MAX_BYTES = int(os.environ.get("LOG_MAX_BYTES", str(10 * 1024 * 1024)))
 DEFAULT_BACKUP_COUNT = int(os.environ.get("LOG_BACKUP_COUNT", "5"))

@@ -35,7 +35,7 @@ class FileLock(AbstractContextManager):
         self.timeout = timeout
         self._fd: Optional[int] = None
 
-    def __enter__(self) -> "FileLock":
+    def __enter__(self) -> FileLock:
         deadline = time.monotonic() + self.timeout
         while True:
             try:

@@ -1,20 +1,18 @@
-"""Flask UI for ReconScript without authentication or RBAC."""
+"""Flask UI for ReconScript without authentication or consent requirements."""
 
 from __future__ import annotations
 
 import json
 import logging
 import os
-import uuid
-from pathlib import Path
 
 from flask import (
     Flask,
+    Response,
     abort,
     flash,
     redirect,
     render_template,
-    Response,
     request,
     send_from_directory,
     url_for,
@@ -27,61 +25,27 @@ from .report import ensure_results_dir, persist_report
 from .scope import validate_target
 
 LOGGER = logging.getLogger(__name__)
-DEV_KEYS_DIR = Path(__file__).resolve().parents[1] / "keys"
 
 
-def _allow_dev_secrets() -> bool:
-    return os.environ.get("ALLOW_DEV_SECRETS", "false").lower() == "true"
-
-
-def _enforce_secret_path(path: Path, *, env_var: str) -> Path:
-    resolved = path.expanduser().resolve()
-    if not resolved.exists():
-        raise RuntimeError(
-            f"{env_var} must point to an existing file (got {resolved})."
-        )
-    if DEV_KEYS_DIR in resolved.parents and not _allow_dev_secrets():
-        raise RuntimeError(
-            f"{env_var} refers to a developer sample key. Provide deployment-specific "
-            "secrets or set ALLOW_DEV_SECRETS=true for local testing."
-        )
-    return resolved
-
-
-def _load_secret_key() -> bytes:
-    secret_env = os.environ.get("FLASK_SECRET_KEY_FILE")
-    if not secret_env:
-        raise RuntimeError(
-            "FLASK_SECRET_KEY_FILE environment variable must reference a secure secret key file."
-        )
-    secret_path = _enforce_secret_path(Path(secret_env), env_var="FLASK_SECRET_KEY_FILE")
-    try:
-        secret = secret_path.read_bytes().strip()
-    except OSError as exc:
-        raise RuntimeError(
-            f"Unable to read Flask secret key from {secret_path}: {exc}"
-        ) from exc
-    if not secret:
-        raise RuntimeError(f"Secret key file {secret_path} is empty.")
-    return secret
-
-
-def _store_upload(file_storage) -> Path:
-    upload_dir = ensure_results_dir() / "uploads"
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    filename = f"manifest-{uuid.uuid4().hex}.json"
-    path = upload_dir / filename
-    file_storage.save(path)
-    return path
+def _secret_key() -> bytes:
+    explicit = os.environ.get("FLASK_SECRET_KEY") or os.environ.get("SECRET_KEY")
+    if explicit:
+        return explicit.encode("utf-8")
+    LOGGER.warning(
+        "Using ephemeral Flask secret key; set FLASK_SECRET_KEY to persist sessions."
+    )
+    return os.urandom(32)
 
 
 def create_app() -> Flask:
     configure_logging()
 
     app = Flask(__name__)
-    app.config["PUBLIC_UI"] = os.environ.get("ENABLE_PUBLIC_UI", "false").lower() == "true"
+    app.config["PUBLIC_UI"] = (
+        os.environ.get("ENABLE_PUBLIC_UI", "false").lower() == "true"
+    )
     app.config["UPLOAD_FOLDER"] = str(ensure_results_dir() / "uploads")
-    app.secret_key = _load_secret_key()
+    app.secret_key = _secret_key()
 
     @app.context_processor
     def inject_globals():
@@ -100,15 +64,6 @@ def create_app() -> Flask:
             return Response("", status=204)
         return Response(payload, mimetype=content_type)
 
-    def _handle_manifest() -> tuple[Optional[Path], Optional[object]]:
-        file = request.files.get("consent_file")
-        if not file or not file.filename:
-            return None, None
-        temp_path = _store_upload(file)
-        manifest = load_manifest(temp_path)
-        validate_manifest(manifest)
-        return temp_path, manifest
-
     @app.route("/", methods=["GET", "POST"])
     def index():
         if request.method == "POST":
@@ -124,26 +79,8 @@ def create_app() -> Flask:
             )
             try:
                 validate_target(target, expected_ip=expected_ip)
-            except Exception as exc:
+            except Exception as exc:  # pragma: no cover - input validation
                 flash(str(exc), "error")
-                return render_template("index.html")
-
-            consent_path: Optional[Path] = None
-            consent_manifest = None
-            try:
-                consent_path, consent_manifest = _handle_manifest()
-            except ConsentError as exc:
-                flash(f"Consent manifest invalid: {exc}", "error")
-                if consent_path:
-                    consent_path.unlink(missing_ok=True)
-                LOGGER.warning(
-                    "ui.consent.invalid",
-                    extra={
-                        "event": "ui.consent.invalid",
-                        "target": target,
-                        "error": str(exc),
-                    },
-                )
                 return render_template("index.html")
 
             try:
@@ -167,8 +104,6 @@ def create_app() -> Flask:
                 )
             except ReconError as exc:
                 flash(str(exc), "error")
-                if consent_path:
-                    consent_path.unlink(missing_ok=True)
                 LOGGER.error(
                     "ui.scan.failed",
                     extra={
@@ -179,11 +114,7 @@ def create_app() -> Flask:
                 )
                 return render_template("index.html")
 
-            persisted = persist_report(
-                report, consent_source=consent_path, sign=False
-            )
-            if consent_path:
-                consent_path.unlink(missing_ok=True)
+            persisted = persist_report(report, consent_source=None, sign=False)
             LOGGER.info(
                 "ui.scan.completed",
                 extra={
@@ -209,16 +140,14 @@ def create_app() -> Flask:
 
     @app.route("/results/<path:filename>")
     def download_result(filename: str):
-        return send_from_directory(
-            ensure_results_dir(), filename, as_attachment=True
-        )
+        return send_from_directory(ensure_results_dir(), filename, as_attachment=True)
 
     return app
 
 
 def main() -> None:
     app = create_app()
-    host = "0.0.0.0" if app.config["PUBLIC_UI"] else "127.0.0.1"
+    host = "0.0.0.0" if app.config["PUBLIC_UI"] else "127.0.0.1"  # noqa: S104
     port = int(os.environ.get("DEFAULT_PORT", "5000"))
     if app.config["PUBLIC_UI"]:
         LOGGER.warning(
@@ -231,5 +160,5 @@ def main() -> None:
     app.run(host=host, port=port, threaded=True)
 
 
-if __name__ == "__main__":  # pragma: no cover - manual invocation
+if __name__ == "__main__":  # pragma: no cover - manual invocation helper
     main()
