@@ -1,3 +1,5 @@
+# Authorized testing only — do not scan targets without explicit permission.
+# This tool is non-intrusive by default and will not perform exploitation or credentialed checks.
 """Report rendering utilities for ReconScript."""
 
 from __future__ import annotations
@@ -6,10 +8,13 @@ from __future__ import annotations
 import html
 import json
 import logging
+import textwrap
 from collections.abc import Iterable, Sequence
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
+
+from . import __version__
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 PROJECT_TEMPLATES = PACKAGE_DIR.parent / "templates"
@@ -25,7 +30,7 @@ except Exception:  # pragma: no cover - fallback for minimal environments
     Environment = None  # type: ignore[assignment]
     FileSystemLoader = None  # type: ignore[assignment]
     select_autoescape = None  # type: ignore[assignment]
-    _JINJA_ENV: Optional[Environment] = None
+    _JINJA_ENV: Environment | None = None
 else:  # pragma: no cover - exercised when Jinja2 installed
     loader_paths = [str(path) for path in TEMPLATE_DIRS] or [str(PACKAGE_TEMPLATES)]
     _JINJA_ENV = Environment(
@@ -33,46 +38,165 @@ else:  # pragma: no cover - exercised when Jinja2 installed
         autoescape=select_autoescape(["html", "xml"]),
     )
 
-from . import __version__
-
 LOGGER = logging.getLogger(__name__)
 PDF_FALLBACK_MESSAGE = "PDF dependencies not found — served HTML version instead."
+MAX_RAW_SNIPPET = 400
 
 
-def render_json(data: Dict[str, object]) -> str:
+def _merge_runtime(
+    metadata: dict[str, object], data: dict[str, object]
+) -> dict[str, object]:
+    runtime = data.get("runtime")
+    if not isinstance(runtime, dict):
+        runtime = {}
+    merged: dict[str, object] = dict(runtime)
+    for key in ("started_at", "completed_at"):
+        candidate = data.get(key) or metadata.get(key)
+        if candidate and key not in merged:
+            merged[key] = candidate
+    duration = data.get("duration")
+    if duration is not None and "duration" not in merged:
+        merged["duration"] = duration
+    return merged
+
+
+def _clip_snippet(value: str) -> str:
+    snippet = value.strip()
+    if len(snippet) <= MAX_RAW_SNIPPET:
+        return snippet
+    return snippet[: MAX_RAW_SNIPPET - 3] + "..."
+
+
+def _sanitize_findings(findings: object) -> list[dict[str, object]]:
+    sanitized: list[dict[str, object]] = []
+    if not isinstance(findings, Sequence):
+        return sanitized
+
+    for item in findings:
+        if not isinstance(item, dict):
+            continue
+
+        summary = str(item.get("summary") or item.get("issue") or "observation").strip()
+        tool = str(item.get("tool") or "unknown").strip()
+        cmdline = str(item.get("cmdline") or "").strip()
+        started_at = str(item.get("started_at") or "").strip()
+        completed_at = str(item.get("completed_at") or "").strip()
+        raw_snippet_obj = item.get("raw_snippet")
+        raw_snippet = "" if raw_snippet_obj is None else str(raw_snippet_obj)
+        severity = item.get("severity")
+        port = item.get("port")
+
+        sanitized_entry: dict[str, object] = {
+            "summary": summary or "observation",
+            "tool": tool,
+            "cmdline": cmdline,
+            "started_at": started_at,
+            "completed_at": completed_at,
+            "raw_snippet": _clip_snippet(raw_snippet),
+        }
+
+        if port is not None:
+            sanitized_entry["port"] = port
+
+        if severity:
+            sanitized_entry["severity"] = str(severity)
+
+        evidence = item.get("evidence")
+        if isinstance(evidence, dict) and evidence:
+            sanitized_entry["evidence"] = evidence
+
+        sanitized.append(sanitized_entry)
+
+    return sanitized
+
+
+def _normalize_report(data: dict[str, object]) -> dict[str, object]:
+    if not isinstance(data, dict):
+        return {
+            "target": "unknown",
+            "hostname": "N/A",
+            "ports": [],
+            "open_ports": [],
+            "findings": [],
+            "runtime": {},
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+        }
+    metadata = data.get("metadata") if isinstance(data.get("metadata"), dict) else {}
+    artifacts = data.get("artifacts") if isinstance(data.get("artifacts"), dict) else {}
+
+    normalized: dict[str, object] = dict(data)
+    normalized["target"] = metadata.get("target", data.get("target", "unknown"))
+    normalized["hostname"] = metadata.get("hostname", data.get("hostname"))
+    normalized["ports"] = list(metadata.get("scanned_tcp_ports", data.get("ports", [])))
+    normalized["udp_ports"] = list(metadata.get("scanned_udp_ports", []))
+    normalized["open_ports"] = list(
+        artifacts.get("tcp", {}).get("open_ports", data.get("open_ports", []))
+    )
+    normalized["http_services"] = artifacts.get("http", {}).get("services", {})
+    normalized["runtime"] = _merge_runtime(metadata, data)
+    normalized["timestamp"] = (
+        normalized.get("timestamp")
+        or normalized["runtime"].get("started_at")
+        or datetime.utcnow().isoformat() + "Z"
+    )
+    normalized_findings = _sanitize_findings(data.get("findings"))
+    normalized["findings"] = normalized_findings
+    normalized["legacy_findings"] = [
+        {
+            "port": item.get("port", "n/a"),
+            "issue": item.get("summary"),
+            "details": {
+                "tool": item.get("tool"),
+                "cmdline": item.get("cmdline"),
+                "started_at": item.get("started_at"),
+                "completed_at": item.get("completed_at"),
+                "raw_snippet": item.get("raw_snippet"),
+            },
+        }
+        for item in normalized_findings
+    ]
+    normalized["profile"] = metadata.get("profile", {})
+    normalized["evidence_level"] = metadata.get(
+        "evidence_level", data.get("evidence_level")
+    )
+    normalized["consent_present"] = metadata.get(
+        "consent_present", data.get("consent_present")
+    )
+    normalized["version"] = metadata.get("version", data.get("version", __version__))
+    return normalized
+
+
+def render_json(data: dict[str, object]) -> str:
     """Return a canonical JSON representation of the scan results."""
 
     return json.dumps(data, indent=2, sort_keys=True)
 
 
-def render_markdown(data: Dict[str, object]) -> str:
+def render_markdown(data: dict[str, object]) -> str:
     """Render the report data in Markdown format."""
+
+    normalized = _normalize_report(data)
 
     if _JINJA_ENV is not None and _JINJA_ENV.loader is not None:
         try:
             template = _JINJA_ENV.get_template("report.md.j2")
-            return template.render(data=data)
-        except Exception:
-            pass
+            return template.render(data=normalized)
+        except Exception as exc:  # pragma: no cover - defensive logging
+            LOGGER.debug("Falling back to builtin Markdown renderer: %s", exc)
 
-    target = data.get("target", "unknown")
-    timestamp = data.get("timestamp", datetime.utcnow().isoformat() + "Z")
-    hostname = data.get("hostname") or "N/A"
-    ports = _format_list(data.get("ports", []))
-    open_ports = _format_list(data.get("open_ports", []))
-    findings = data.get("findings", [])
-    recommendations = _build_recommendations(findings)
-
-    lines: List[str] = []
+    context = _build_markdown_context(normalized)
+    lines = _render_markdown_sections(context)
+    return "\n".join(lines) + "\n"
 
 
-def render_html(data: Dict[str, object], out_path: Path) -> Path:
+def render_html(data: dict[str, object], out_path: Path) -> Path:
     """Render the report data as HTML and persist it to ``out_path``."""
 
     if not isinstance(out_path, Path):
         out_path = Path(out_path)
 
-    context = _build_template_context(data)
+    normalized = _normalize_report(data)
+    context = _build_template_context(normalized)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     html_output = _render_html_document(context)
@@ -80,7 +204,7 @@ def render_html(data: Dict[str, object], out_path: Path) -> Path:
     return out_path.resolve()
 
 
-def generate_pdf(html_path: Path, pdf_path: Path) -> Tuple[Path, bool]:
+def generate_pdf(html_path: Path, pdf_path: Path) -> tuple[Path, bool]:
     """Generate a PDF from ``html_path`` and return the written file."""
 
     if not isinstance(html_path, Path):
@@ -114,8 +238,8 @@ def generate_pdf(html_path: Path, pdf_path: Path) -> Tuple[Path, bool]:
 
 
 def write_report(
-    data: Dict[str, object], outfile: Path, format: str
-) -> Tuple[Path, str]:
+    data: dict[str, object], outfile: Path, format: str
+) -> tuple[Path, str]:
     """Write ``data`` to ``outfile`` using ``format`` and return the resulting path."""
 
     if not isinstance(outfile, Path):
@@ -152,36 +276,45 @@ def _format_list(values: Iterable[object]) -> str:
     return ", ".join(str(item) for item in items)
 
 
-def _build_recommendations(findings: Sequence[Dict[str, object]]) -> List[str]:
-    suggestions: List[str] = []
-    issues = {item.get("issue") for item in findings}
+def _build_recommendations(findings: Sequence[dict[str, object]]) -> list[str]:
+    suggestions: list[str] = []
+    summaries = {str(item.get("summary")) for item in findings}
 
-    if "missing_security_headers" in issues:
-        suggestions.append(
-            "Set Strict-Transport-Security and related headers on all web front-ends."
-        )
-    if "session_cookie_flags" in issues:
-        suggestions.append(
-            "Configure Secure and HttpOnly attributes on session cookies."
-        )
-    if "server_error" in issues:
-        suggestions.append(
-            "Review backend error logs for endpoints returning 5xx responses."
-        )
+    for summary in summaries:
+        lowered = summary.lower()
+        if "security header" in lowered:
+            header_message = (
+                "Review HTTP response headers and enable Strict-Transport-"
+                "Security where appropriate."
+            )
+            suggestions.append(header_message)
+        if "cookie" in lowered:
+            suggestions.append(
+                "Verify cookies include Secure and HttpOnly attributes on production systems."
+            )
+        if "error" in lowered or "5xx" in lowered:
+            suggestions.append(
+                "Investigate server error responses for potential misconfigurations."
+            )
+
     if not suggestions and findings:
         suggestions.append(
-            "Investigate informational findings for context-specific remediation."
+            "Review informational observations for context-specific improvements."
         )
+
     return suggestions
 
 
-def _build_markdown_context(data: Dict[str, object]) -> Dict[str, Any]:
+def _build_markdown_context(data: dict[str, object]) -> dict[str, Any]:
     findings = data.get("findings", [])
+    http_services = data.get("http_services", {})
+    profile = data.get("profile", {})
     context = {
         "target": data.get("target", "unknown"),
         "timestamp": data.get("timestamp", datetime.utcnow().isoformat() + "Z"),
         "hostname": data.get("hostname") or "N/A",
         "ports": _format_list(data.get("ports", [])) or "None",
+        "udp_ports": _format_list(data.get("udp_ports", [])) or "None",
         "open_ports": _format_list(data.get("open_ports", [])) or "None detected",
         "findings": findings if isinstance(findings, Sequence) else [],
         "recommendations": _build_recommendations(
@@ -189,41 +322,95 @@ def _build_markdown_context(data: Dict[str, object]) -> Dict[str, Any]:
         ),
         "version": data.get("version", __version__),
         "runtime": data.get("runtime", {}),
+        "http_services": http_services if isinstance(http_services, dict) else {},
+        "profile": profile if isinstance(profile, dict) else {},
+        "profile_name": profile.get("name") if isinstance(profile, dict) else "N/A",
+        "evidence_level": data.get("evidence_level", "unknown"),
+        "consent_present": data.get("consent_present"),
     }
     return context
 
 
-def _render_markdown_sections(context: Dict[str, Any]) -> List[str]:
-    lines: List[str] = [
+def _render_markdown_sections(context: dict[str, Any]) -> list[str]:
+    lines: list[str] = [
         f"# ReconScript Report — {context['target']}",
         "",
         f"*Generated:* {context['timestamp']}",
         f"*Hostname:* {context['hostname']}",
+        f"*Evidence level:* {context['evidence_level']}",
+        f"*Profile:* {context['profile_name']}",
         f"*Ports scanned:* {context['ports']}",
+        f"*UDP ports scanned:* {context['udp_ports']}",
         f"*Open ports:* {context['open_ports']}",
         "",
-        "## Findings",
+        "## Recon Profile",
     ]
 
+    profile = context.get("profile", {})
+    if profile:
+        lines.extend(
+            [
+                f"- Max TCP ports: {profile.get('max_tcp_ports', 'unknown')}",
+                f"- TCP concurrency: {profile.get('tcp_concurrency', 'unknown')}",
+                f"- Directory enumeration: {profile.get('dir_enum', 'unknown')}",
+            ]
+        )
+    else:
+        lines.append("- Profile details unavailable.")
+
+    lines.append("")
+    lines.append("## HTTP")
+    services = context.get("http_services", {})
+    if services:
+        for port, info in sorted(services.items(), key=lambda item: item[0]):
+            if isinstance(info, dict):
+                status = info.get("status_code", "n/a")
+                url = info.get("url", "")
+                lines.append(f"- Port {port}: status {status} — {url}")
+            else:
+                lines.append(f"- Port {port}: {info}")
+    else:
+        lines.append("No HTTP services detected.")
+
+    lines.append("")
+    lines.append("## Findings")
     findings = context.get("findings", [])
     if findings:
-        for item in findings:
-            port = item.get("port", "n/a") if isinstance(item, dict) else "n/a"
-            issue = (
-                item.get("issue", "observation")
-                if isinstance(item, dict)
-                else str(item)
-            )
-            lines.append(f"- Port `{port}` — `{issue}`")
-            if isinstance(item, dict) and item.get("details") is not None:
-                details = item["details"]
-                if isinstance(details, (dict, list)):
-                    rendered = json.dumps(details, indent=2, sort_keys=True)
-                    lines.append("  ```json")
-                    lines.extend(f"  {line}" for line in rendered.splitlines())
-                    lines.append("  ```")
-                else:
-                    lines.append(f"  {details}")
+        for index, item in enumerate(findings, start=1):
+            if not isinstance(item, dict):
+                lines.append(f"- {item}")
+                continue
+
+            summary = item.get("summary", "Observation")
+            lines.append(f"### Finding {index}: {summary}")
+
+            tool = item.get("tool")
+            if tool:
+                lines.append(f"- **Tool:** {tool}")
+
+            cmdline = item.get("cmdline")
+            if cmdline:
+                lines.append(f"- **Command:** `{cmdline}`")
+
+            started = item.get("started_at")
+            completed = item.get("completed_at")
+            if started or completed:
+                timing_parts: list[str] = []
+                if started:
+                    timing_parts.append(f"started {started}")
+                if completed:
+                    timing_parts.append(f"completed {completed}")
+                lines.append(f"- **Timing:** {', '.join(timing_parts)}")
+
+            severity = item.get("severity")
+            if severity:
+                lines.append(f"- **Severity:** {severity}")
+
+            snippet = item.get("raw_snippet")
+            if snippet:
+                lines.append("```text")
+                lines.extend(str(snippet).splitlines())
+                lines.append("```")
     else:
         lines.append("No findings reported.")
 
@@ -245,10 +432,13 @@ def _render_markdown_sections(context: Dict[str, Any]) -> List[str]:
             f"- **Runtime:** {runtime}",
         ]
     )
+    consent = context.get("consent_present")
+    if consent is not None:
+        lines.append(f"- **Consent provided:** {bool(consent)}")
     return lines
 
 
-def _build_template_context(data: Dict[str, object]) -> Dict[str, object]:
+def _build_template_context(data: dict[str, object]) -> dict[str, object]:
     timestamp_raw = str(data.get("timestamp", datetime.utcnow().isoformat() + "Z"))
     findings = data.get("findings", [])
     findings_count = len(findings) if isinstance(findings, Sequence) else 0
@@ -278,7 +468,7 @@ def _build_template_context(data: Dict[str, object]) -> Dict[str, object]:
     }
 
 
-def _summary_rows(data: Dict[str, object]) -> List[Tuple[str, str]]:
+def _summary_rows(data: dict[str, object]) -> list[tuple[str, str]]:
     ports = _format_list(data.get("ports", [])) or "None"
     open_ports = _format_list(data.get("open_ports", [])) or "None detected"
     findings = data.get("findings", [])
@@ -288,7 +478,7 @@ def _summary_rows(data: Dict[str, object]) -> List[Tuple[str, str]]:
         runtime.get("duration") if isinstance(runtime, dict) else data.get("duration")
     )
 
-    rows: List[Tuple[str, str]] = [
+    rows: list[tuple[str, str]] = [
         ("Target", str(data.get("target", "unknown"))),
         ("Hostname", str(data.get("hostname") or "N/A")),
         ("Ports Scanned", ports),
@@ -305,21 +495,28 @@ def _summary_rows(data: Dict[str, object]) -> List[Tuple[str, str]]:
     return rows
 
 
-def _format_findings(findings: Sequence[Dict[str, object]]) -> List[Dict[str, object]]:
-    formatted: List[Dict[str, object]] = []
+def _format_findings(findings: Sequence[dict[str, object]]) -> list[dict[str, object]]:
+    formatted: list[dict[str, object]] = []
     for item in findings or []:
+        if not isinstance(item, dict):
+            continue
         formatted.append(
             {
-                "port": item.get("port", "n/a"),
-                "issue": item.get("issue", "observation"),
-                "details": item.get("details"),
+                "summary": item.get("summary", "Observation"),
+                "tool": item.get("tool", "unknown"),
+                "cmdline": item.get("cmdline", ""),
+                "started_at": item.get("started_at", ""),
+                "completed_at": item.get("completed_at", ""),
+                "raw_snippet": item.get("raw_snippet", ""),
+                "severity": item.get("severity"),
+                "port": item.get("port"),
             }
         )
     return formatted
 
 
-def _metadata_entries(data: Dict[str, object], timestamp: str) -> List[Tuple[str, str]]:
-    entries: List[Tuple[str, str]] = [
+def _metadata_entries(data: dict[str, object], timestamp: str) -> list[tuple[str, str]]:
+    entries: list[tuple[str, str]] = [
         ("Tool Version", str(data.get("version", __version__))),
         ("Report Generated", timestamp),
     ]
@@ -359,7 +556,28 @@ def _format_human_date(timestamp: str) -> str:
     return parsed.strftime("%d %B %Y %H:%M UTC")
 
 
-def _render_html_document(context: Dict[str, object]) -> str:
+def _format_html_timing(item: dict[str, object]) -> str:
+    started = item.get("started_at")
+    completed = item.get("completed_at")
+    parts: list[str] = []
+    if started:
+        parts.append(f"<p><strong>Started:</strong> {html.escape(str(started))}</p>")
+    if completed:
+        parts.append(
+            f"<p><strong>Completed:</strong> {html.escape(str(completed))}</p>"
+        )
+    return "".join(parts)
+
+
+def _format_html_command(item: dict[str, object]) -> str:
+    cmdline = item.get("cmdline")
+    if not cmdline:
+        return ""
+    escaped = html.escape(str(cmdline))
+    return f"<p><strong>Command:</strong> <code>{escaped}</code></p>"
+
+
+def _render_html_document(context: dict[str, object]) -> str:
     if _JINJA_ENV is not None:
         try:
             template = _JINJA_ENV.get_template(HTML_TEMPLATE_NAME)
@@ -369,7 +587,7 @@ def _render_html_document(context: Dict[str, object]) -> str:
     return _render_html_fallback(context)
 
 
-def _render_html_fallback(context: Dict[str, object]) -> str:
+def _render_html_fallback(context: dict[str, object]) -> str:
     summary_rows = context.get("summary_rows", [])
     findings = context.get("findings", [])
     recommendations = context.get("recommendations", [])
@@ -384,17 +602,30 @@ def _render_html_fallback(context: Dict[str, object]) -> str:
         findings_html = "".join(
             """
             <li>
-              <strong>Port {port}</strong> — <code>{issue}</code>
-              {details}
+              <strong>{summary}</strong>
+              <div class="meta">
+                <p><strong>Tool:</strong> {tool}</p>
+                {command}
+                {timing}
+                {severity}
+              </div>
+              <details>
+                <summary>View evidence</summary>
+                <pre>{snippet}</pre>
+              </details>
             </li>
             """.strip().format(
-                port=html.escape(str(item.get("port", "n/a"))),
-                issue=html.escape(str(item.get("issue", "observation"))),
-                details=(
-                    f"<pre>{html.escape(json.dumps(item.get('details'), indent=2))}</pre>"
-                    if item.get("details") is not None
-                    else "<p>No additional context supplied.</p>"
+                summary=html.escape(str(item.get("summary", "Observation"))),
+                tool=html.escape(str(item.get("tool", "unknown"))),
+                command=_format_html_command(item),
+                timing=_format_html_timing(item),
+                severity=(
+                    f"<p><strong>Severity:</strong> {html.escape(str(item.get('severity')))}</p>"
+                    if item.get("severity")
+                    else ""
                 ),
+                snippet=html.escape(str(item.get("raw_snippet", "")))
+                or "No evidence recorded.",
             )
             for item in findings
         )
@@ -422,6 +653,124 @@ def _render_html_fallback(context: Dict[str, object]) -> str:
         + "</dl>"
     )
 
+    styles = textwrap.dedent(
+        """
+        body {
+          font-family: 'Segoe UI', 'Liberation Sans', Arial, sans-serif;
+          margin: 0;
+          background: #f5f7fa;
+          color: #1f2937;
+        }
+
+        header.cover {
+          background: linear-gradient(135deg, #0f172a, #1f2937);
+          color: #f8fafc;
+          padding: 48px 32px;
+          text-align: center;
+        }
+
+        header.cover .logo {
+          display: inline-block;
+          padding: 10px 28px;
+          border: 2px dashed rgba(255, 255, 255, 0.45);
+          border-radius: 10px;
+          letter-spacing: 0.18rem;
+          text-transform: uppercase;
+          margin-bottom: 24px;
+        }
+
+        main {
+          padding: 36px 48px 64px;
+        }
+
+        section {
+          margin-bottom: 48px;
+        }
+
+        h2 {
+          border-bottom: 2px solid #1f2937;
+          padding-bottom: 6px;
+        }
+
+        table.summary {
+          width: 100%;
+          border-collapse: collapse;
+          background: #ffffff;
+          border-radius: 8px;
+          overflow: hidden;
+          box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
+        }
+
+        table.summary th,
+        table.summary td {
+          padding: 14px 18px;
+          border-bottom: 1px solid #e2e8f0;
+        }
+
+        table.summary th {
+          width: 30%;
+          background: #f1f5f9;
+          font-weight: 600;
+          letter-spacing: 0.02rem;
+        }
+
+        ul.findings {
+          list-style: none;
+          padding-left: 0;
+        }
+
+        ul.findings li {
+          background: #ffffff;
+          border-left: 4px solid #f97316;
+          padding: 16px 20px;
+          margin-bottom: 14px;
+          box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1);
+        }
+
+        ul.findings li pre {
+          background: #0f172a;
+          color: #f8fafc;
+          padding: 12px;
+          border-radius: 6px;
+          overflow-x: auto;
+          font-size: 0.85rem;
+        }
+
+        ul.recommendations {
+          padding-left: 18px;
+        }
+
+        dl.meta {
+          display: grid;
+          grid-template-columns: 220px 1fr;
+          gap: 12px 18px;
+          background: #ffffff;
+          padding: 18px 22px;
+          border-radius: 8px;
+          box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+        }
+
+        dl.meta dt {
+          font-weight: 600;
+        }
+
+        dl.meta dd {
+          margin: 0;
+          font-family: 'Fira Code', 'Source Code Pro', monospace;
+          white-space: pre-wrap;
+        }
+
+        footer {
+          text-align: center;
+          padding: 24px;
+          background: #f1f5f9;
+          border-top: 1px solid #e2e8f0;
+          font-size: 0.85rem;
+          color: #475569;
+        }
+        """
+    ).strip()
+
     return f"""<!DOCTYPE html>
 <html lang=\"en\">
   <head>
@@ -429,23 +778,7 @@ def _render_html_fallback(context: Dict[str, object]) -> str:
     <title>{html.escape(str(context.get('title')))}</title>
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
     <style>
-      body {{ font-family: 'Segoe UI', 'Liberation Sans', Arial, sans-serif; margin: 0; background: #f5f7fa; color: #1f2937; }}
-      header.cover {{ background: linear-gradient(135deg, #0f172a, #1f2937); color: #f8fafc; padding: 48px 32px; text-align: center; }}
-      header.cover .logo {{ display: inline-block; padding: 10px 28px; border: 2px dashed rgba(255, 255, 255, 0.45); border-radius: 10px; letter-spacing: 0.18rem; text-transform: uppercase; margin-bottom: 24px; }}
-      main {{ padding: 36px 48px 64px; }}
-      section {{ margin-bottom: 48px; }}
-      h2 {{ border-bottom: 2px solid #1f2937; padding-bottom: 6px; }}
-      table.summary {{ width: 100%; border-collapse: collapse; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08); }}
-      table.summary th, table.summary td {{ padding: 14px 18px; border-bottom: 1px solid #e2e8f0; }}
-      table.summary th {{ width: 30%; background: #f1f5f9; font-weight: 600; letter-spacing: 0.02rem; }}
-      ul.findings {{ list-style: none; padding-left: 0; }}
-      ul.findings li {{ background: #ffffff; border-left: 4px solid #f97316; padding: 16px 20px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1); }}
-      ul.findings li pre {{ background: #0f172a; color: #f8fafc; padding: 12px; border-radius: 6px; overflow-x: auto; font-size: 0.85rem; }}
-      ul.recommendations {{ padding-left: 18px; }}
-      dl.meta {{ display: grid; grid-template-columns: 220px 1fr; gap: 12px 18px; background: #ffffff; padding: 18px 22px; border-radius: 8px; box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08); }}
-      dl.meta dt {{ font-weight: 600; }}
-      dl.meta dd {{ margin: 0; font-family: 'Fira Code', 'Source Code Pro', monospace; white-space: pre-wrap; }}
-      footer {{ text-align: center; padding: 24px; background: #f1f5f9; border-top: 1px solid #e2e8f0; font-size: 0.85rem; color: #475569; }}
+    {styles}
     </style>
   </head>
   <body>
@@ -476,7 +809,8 @@ def _render_html_fallback(context: Dict[str, object]) -> str:
       </section>
     </main>
     <footer>
-      ReconScript v{html.escape(str(context.get('version')))} · Generated {html.escape(str(context.get('timestamp')))}
+      ReconScript v{html.escape(str(context.get('version')))}
+      · Generated {html.escape(str(context.get('timestamp')))}
     </footer>
   </body>
 </html>"""

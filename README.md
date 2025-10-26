@@ -8,6 +8,16 @@ ReconScript is a read-only reconnaissance toolkit. It collects metadata from app
 - **Structured reporting:** Export HTML, Markdown, JSON, or PDF artefacts, each tagged with metadata for downstream review.
 - **Operational guardrails:** Environment variables, consent manifests, and placeholder keys highlight what must be configured before running against production targets.
 
+## Safe Default Reconnaissance Profile
+ReconScript now ships with a conservative, non-intrusive recon profile that limits every network touchpoint. The `ReconProfile` dataclass describes the caps in effect (TCP port counts, concurrency, DNS behaviour, HTTP enumeration depth) and is surfaced in every report under `metadata.profile`. The defaults explicitly disable exploitation, credentialed checks, and aggressive crawling.
+
+* Passive DNS: WHOIS summaries, certificate transparency notes, and hostname resolutions without issuing active probes beyond a single record sweep.
+* Active probing: one pass of rate-limited DNS queries, a single UDP sweep, and a TCP SYN scan capped to a curated port list.
+* HTTP coverage: GET/HEAD requests and small wordlist enumeration only for low/medium evidence levels, with strict per-request rate limiting.
+* Reporting: every finding includes timestamps, the exact pseudo-command executed, and a 400-character evidence snippet.
+
+You can create custom profiles from the CLI or web UI by instantiating `ReconProfile` and passing it to `run_recon()`. This allows regulated environments to tighten or loosen bounds while keeping safe defaults intact.
+
 ## Project Layout
 The repository follows a conventional Python structure with documentation and automation assets kept alongside the source code. A more detailed component map lives in [`docs/DEPENDENCY_OVERVIEW.md`](docs/DEPENDENCY_OVERVIEW.md).
 

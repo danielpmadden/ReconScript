@@ -1,8 +1,10 @@
+
+<!-- Authorized testing only — do not scan targets without explicit permission. This tool is non-intrusive by default and will not perform exploitation or credentialed checks. -->
 {% extends 'layout.html' %}
 {% block content %}
   <div class="card">
     <h2>Launch Scoped Scan</h2>
-    <p>All scans are read-only. Provide a target host and optional parameters, then launch the scan.</p>
+    <p>All scans are read-only and operate with a conservative reconnaissance profile. Provide a single host to scan; network ranges require explicit authorization.</p>
     <form method="post" id="scan-form">
       <label for="target">Target IP or hostname</label>
       <input type="text" id="target" name="target" required placeholder="127.0.0.1" />
@@ -18,10 +20,16 @@
 
       <label for="evidence_level">Evidence level</label>
       <select id="evidence_level" name="evidence_level">
-        <option value="low">Low - headers and metadata only</option>
-        <option value="medium">Medium - headers and artefacts</option>
-        <option value="high">High - full request/response logs</option>
+        <option value="low">Low - passive metadata &amp; light HTTP checks</option>
+        <option value="medium">Medium - adds cautious directory discovery</option>
+        <option value="high">High - broader TCP coverage (still non-intrusive)</option>
       </select>
+
+      <div class="checkbox">
+        <input type="checkbox" id="authorization" name="authorization" required />
+        <label for="authorization">I have authorization to scan this target</label>
+      </div>
+      <p class="hint">This profile will not attempt exploitation, credentialed logins, or brute force. Network-wide scans are opt-in and require the authorization checkbox.</p>
 
       <button type="submit" id="submit-btn">Run Scan</button>
     </form>

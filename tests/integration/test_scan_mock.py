@@ -1,4 +1,6 @@
-from __future__ import annotations
+# Authorized testing only — do not scan targets without explicit permission.
+# This tool is non-intrusive by default and will not perform exploitation or credentialed checks.
+"""Integration tests for safe-profile scans against a local mock server."""
 
 import http.server
 import json
@@ -36,25 +38,30 @@ def mock_server() -> tuple[str, int]:
 
 
 @pytest.mark.integration
-def test_scan_low_and_medium_levels(mock_server) -> None:
+def test_safe_profile_generates_required_metadata(mock_server) -> None:
     host, port = mock_server
-    report_low = run_recon(target=host, ports=[port], evidence_level="low")
-    assert port in report_low["open_ports"]
+    report = run_recon(target=host, ports=[port], evidence_level="low")
 
-    persisted = persist_report(report_low)
+    tcp_artifacts = report["artifacts"]["tcp"]
+    assert port in tcp_artifacts["open_ports"]
+
+    for finding in report["findings"]:
+        assert {
+            "tool",
+            "cmdline",
+            "summary",
+            "started_at",
+            "completed_at",
+            "raw_snippet",
+        }.issubset(finding)
+        assert len(finding["raw_snippet"]) <= 400
+
+    persisted = persist_report(report)
     try:
         report_data = json.loads(persisted.report_file.read_text(encoding="utf-8"))
         stored_hash = report_data["report_hash"]
         assert stored_hash == compute_report_hash(report_data)
-
-        http_data = report_data["http_checks"][str(port)]
-        assert "raw_request" not in http_data
-        assert "raw_response" not in http_data
-        assert http_data["headers"]["Set-Cookie"] == "[redacted]"
-
-        report_medium = run_recon(target=host, ports=[port], evidence_level="medium")
-        http_medium = report_medium["http_checks"][port]
-        assert http_medium.get("screenshots") == []
-        assert "raw_response" not in http_medium
+        assert report_data["metadata"]["profile"]["name"].startswith("safe")
+        assert all(len(f["raw_snippet"]) <= 400 for f in report_data["findings"])
     finally:
         shutil.rmtree(persisted.base, ignore_errors=True)

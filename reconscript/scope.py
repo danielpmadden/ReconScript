@@ -1,13 +1,12 @@
-from __future__ import annotations
-
 """Target scope validation helpers for ReconScript."""
+
+from __future__ import annotations
 
 import ipaddress
 import os
 import re
 import socket
 from dataclasses import dataclass
-from typing import Optional
 
 __all__ = [
     "ScopeValidation",
@@ -35,7 +34,7 @@ class ScopeValidation:
     original: str
     target: str
     kind: str  # "ip" or "hostname"
-    resolved_ip: Optional[str] = None
+    resolved_ip: str | None = None
 
     @property
     def is_local(self) -> bool:
@@ -97,7 +96,7 @@ def validate_target(
     target: str,
     *,
     expected_ip: str | None = None,
-    allow_cidr: Optional[bool] = None,
+    allow_cidr: bool | None = None,
 ) -> ScopeValidation:
     """Validate a CLI/UI supplied target string."""
 
