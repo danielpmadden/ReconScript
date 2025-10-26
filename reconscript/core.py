@@ -1,4 +1,6 @@
-"""High-level orchestration for ReconScript scan execution."""
+# Authorized testing only — do not scan targets without explicit permission.
+# This tool is non-intrusive by default and will not perform exploitation or credentialed checks.
+"""High-level orchestration for ReconScript safe recon execution."""
 
 from __future__ import annotations
 
@@ -16,19 +18,15 @@ from .metrics import (
 )
 from .report import embed_runtime_metadata
 from .scanner import (
-    DEFAULT_PORTS,
-    REDACTION_KEYS,
-    TOKEN_CAPACITY,
-    TOKEN_RATE,
-    ScanConfig,
-    check_security_headers,
-    fetch_robots,
-    fetch_tls_certificate,
-    generate_findings,
-    http_probe_services,
+    DEFAULT_UDP_PORTS,
+    ReconProfile,
+    active_dns_sweep,
+    http_checks,
+    passive_dns_collection,
+    profile_for_evidence,
     serialize_results,
-    tcp_connect_scan,
-    validate_port_list,
+    tcp_syn_scan,
+    udp_scan_pass,
 )
 from .scanner.throttle import TokenBucket
 from .scope import ScopeError, ScopeValidation, ensure_within_allowlist, validate_target
@@ -43,19 +41,17 @@ class ReconError(RuntimeError):
     """Raised when a scan cannot proceed."""
 
 
-def _determine_redactions(extra: Iterable[str] | None) -> set[str]:
-    redactions = set(REDACTION_KEYS)
-    for item in extra or []:
-        redactions.add(str(item).lower())
-    return redactions
-
-
 def _hostname_for_requests(scope: ScopeValidation, override: str | None) -> str:
     if override:
         return override
     if scope.kind == "hostname":
         return scope.target
     return scope.resolved_ip or scope.target
+
+
+def _bucket(profile: ReconProfile, key: str) -> TokenBucket:
+    rate, burst = profile.rate_limits[key]
+    return TokenBucket(rate=rate, capacity=burst)
 
 
 def run_recon(
@@ -70,6 +66,7 @@ def run_recon(
     consent_manifest: ConsentManifest | None = None,
     extra_redactions: Iterable[str] | None = None,
     progress_callback: Callable[[str, float], None] | None = None,
+    profile: ReconProfile | None = None,
 ) -> dict[str, object]:
     """Execute the ReconScript workflow with safety controls."""
 
@@ -77,52 +74,69 @@ def run_recon(
     if evidence_level not in EVIDENCE_LEVELS:
         raise ReconError(f"Evidence level must be one of {sorted(EVIDENCE_LEVELS)}")
 
+    selected_profile = profile or profile_for_evidence(evidence_level)
+    LOGGER.info(
+        "Using recon profile %s",
+        selected_profile.name,
+        extra={"profile": selected_profile.as_dict()},
+    )
+
     record_scan_started(target)
     failure_reason: str | None = None
+    start_clock = time.perf_counter()
+
+    if enable_ipv6:
+        LOGGER.info(
+            "IPv6 scanning requested; safe profile limits probes to IPv4 endpoints.",
+            extra={"event": "scan.ipv6", "requested": True},
+        )
+    if extra_redactions:
+        LOGGER.info(
+            "Ignoring additional redactions under safe profile.",
+            extra={"event": "scan.redactions", "redactions": list(extra_redactions)},
+        )
 
     try:
         scope = validate_target(target, expected_ip=expected_ip)
         ensure_within_allowlist(scope)
 
-        candidates = list(ports) if ports else list(DEFAULT_PORTS)
-        try:
-            port_list = validate_port_list(candidates)
-        except ReconError:
-            failure_reason = "port_validation_failed"
-            raise
-
-        manifest = consent_manifest
-
-        redactions = _determine_redactions(extra_redactions)
-        bucket = TokenBucket(rate=TOKEN_RATE, capacity=TOKEN_CAPACITY)
+        limited_ports = selected_profile.limit_ports(ports)
+        udp_ports = list(DEFAULT_UDP_PORTS)
 
         started_at = datetime.now(timezone.utc)
         report: dict[str, object] = {
-            "target": scope.target,
-            "hostname": hostname,
-            "ports": list(port_list),
-            "version": __version__,
-            "evidence_level": evidence_level,
+            "metadata": {
+                "target": scope.target,
+                "resolved_target": scope.resolved_ip or scope.target,
+                "hostname": hostname,
+                "version": __version__,
+                "evidence_level": evidence_level,
+                "profile": selected_profile.as_dict(),
+                "consent_present": bool(consent_manifest),
+                "scanned_tcp_ports": list(limited_ports),
+                "scanned_udp_ports": list(udp_ports),
+            },
+            "artifacts": {},
+            "findings": [],
         }
-        if manifest:
-            report["consent_signed_by"] = manifest.signer_display
 
         embed_runtime_metadata(report, started_at)
+
+        LOGGER.info(
+            "Consent manifest provided? %s",
+            bool(consent_manifest),
+            extra={"event": "scan.consent", "consent_present": bool(consent_manifest)},
+        )
 
         if dry_run:
             LOGGER.info(
                 "Dry-run requested; network operations skipped.",
                 extra={"event": "scan.dry_run", "target": scope.target},
             )
-            report.update(
-                {
-                    "open_ports": [],
-                    "http_checks": {},
-                    "tls_cert": None,
-                    "robots": {"note": "dry-run"},
-                    "findings": [],
-                }
-            )
+            report["artifacts"] = {
+                "tcp": {"scanned_ports": list(limited_ports), "open_ports": []},
+                "udp": {"scanned_ports": udp_ports, "responses": {}},
+            }
             embed_runtime_metadata(
                 report, started_at, completed_at=started_at, duration=0.0
             )
@@ -130,72 +144,76 @@ def run_recon(
             REPORT_LOGGER.info(serialize_results(report))
             return report
 
-        config = ScanConfig(
-            target=scope.resolved_ip or scope.target,
-            hostname=hostname,
-            ports=port_list,
-            enable_ipv6=enable_ipv6,
-            evidence_level=evidence_level,
-            redaction_keys=redactions,
+        dns_bucket = _bucket(selected_profile, "dns")
+        tcp_bucket = _bucket(selected_profile, "tcp")
+        udp_bucket = _bucket(selected_profile, "udp")
+        http_bucket = _bucket(selected_profile, "http")
+
+        findings: list[dict[str, object]] = []
+        artifacts: dict[str, object] = {}
+
+        if progress_callback:
+            progress_callback("Collecting passive DNS", 0.1)
+        passive_metadata, passive_findings = passive_dns_collection(
+            scope.target, selected_profile
         )
+        artifacts["dns_passive"] = passive_metadata
+        findings.extend(passive_findings)
+
+        if progress_callback:
+            progress_callback("Performing active DNS", 0.25)
+        active_metadata, active_findings = active_dns_sweep(
+            scope.target, selected_profile, dns_bucket
+        )
+        artifacts["dns_active"] = active_metadata
+        findings.extend(active_findings)
+
+        if progress_callback:
+            progress_callback("Running TCP SYN scan", 0.4)
+        tcp_metadata, tcp_findings = tcp_syn_scan(
+            scope.resolved_ip or scope.target,
+            selected_profile,
+            limited_ports,
+            tcp_bucket,
+        )
+        artifacts["tcp"] = tcp_metadata
+        findings.extend(tcp_findings)
+
+        if progress_callback:
+            progress_callback("Running UDP probes", 0.55)
+        udp_metadata, udp_findings = udp_scan_pass(
+            scope.resolved_ip or scope.target, selected_profile, udp_ports, udp_bucket
+        )
+        artifacts["udp"] = udp_metadata
+        findings.extend(udp_findings)
 
         http_host = _hostname_for_requests(scope, hostname)
-        started_clock = time.perf_counter()
-
-        if progress_callback:
-            progress_callback("Starting TCP connect scan", 0.1)
-        try:
-            open_ports = tcp_connect_scan(config, bucket)
-        except Exception:
-            failure_reason = "tcp_scan_failed"
-            raise
-        report["open_ports"] = open_ports
-
-        http_results: dict[int, dict[str, object]] = {}
-        if open_ports:
+        if tcp_metadata.get("open_ports"):
             if progress_callback:
-                progress_callback("Collecting HTTP metadata", 0.4)
-            try:
-                http_results = http_probe_services(config, http_host, open_ports)
-            except Exception:
-                failure_reason = "http_probe_failed"
-                raise
-        report["http_checks"] = http_results
+                progress_callback("Performing HTTP checks", 0.7)
+            http_metadata, http_findings = http_checks(
+                scope.resolved_ip or scope.target,
+                http_host,
+                tcp_metadata.get("open_ports", []),
+                selected_profile,
+                http_bucket,
+            )
+            artifacts["http"] = http_metadata
+            findings.extend(http_findings)
+        else:
+            artifacts["http"] = {"services": {}}
 
-        tls_details = None
-        if any(port in (443, 8443) for port in open_ports):
-            if progress_callback:
-                progress_callback("Retrieving TLS certificates", 0.6)
-            tls_port = 443 if 443 in open_ports else 8443
-            try:
-                tls_details = fetch_tls_certificate(config, tls_port)
-            except Exception:
-                failure_reason = "tls_probe_failed"
-                raise
-        report["tls_cert"] = tls_details
-
-        if progress_callback:
-            progress_callback("Fetching robots.txt", 0.75)
-        try:
-            report["robots"] = fetch_robots(config, http_host)
-        except Exception:
-            failure_reason = "robots_fetch_failed"
-            raise
-
-        if progress_callback:
-            progress_callback("Generating findings", 0.9)
-        try:
-            report["findings"] = generate_findings(http_results)
-        except Exception:
-            failure_reason = "finding_generation_failed"
-            raise
+        report["artifacts"] = artifacts
+        report["findings"] = findings
 
         completed_at = datetime.now(timezone.utc)
-        duration = time.perf_counter() - started_clock
+        duration = time.perf_counter() - start_clock
         embed_runtime_metadata(
             report, started_at, completed_at=completed_at, duration=duration
         )
-        record_scan_completed(scope.target, duration, len(open_ports))
+        record_scan_completed(
+            scope.target, duration, len(tcp_metadata.get("open_ports", []))
+        )
         REPORT_LOGGER.info(serialize_results(report))
 
         if progress_callback:
@@ -219,5 +237,4 @@ def run_recon(
 __all__ = [
     "run_recon",
     "ReconError",
-    "check_security_headers",
 ]

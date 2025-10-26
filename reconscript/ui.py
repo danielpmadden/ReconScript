@@ -1,4 +1,6 @@
-"""Flask UI for ReconScript without authentication or consent requirements."""
+# Authorized testing only — do not scan targets without explicit permission.
+# This tool is non-intrusive by default and will not perform exploitation or credentialed checks.
+"""Flask UI for ReconScript with safe default scanning profiles."""
 
 from __future__ import annotations
 
@@ -20,8 +22,8 @@ from flask import (
 
 from .core import ReconError, run_recon
 from .logging import configure_logging
-from .metrics import metrics_payload
 from .report import ensure_results_dir, persist_report
+from .scanner import profile_for_evidence
 from .scope import validate_target
 
 LOGGER = logging.getLogger(__name__)
@@ -59,6 +61,8 @@ def create_app() -> Flask:
 
     @app.route("/metrics")
     def metrics() -> Response:
+        from .metrics import metrics_payload
+
         payload, content_type = metrics_payload()
         if not payload:
             return Response("", status=204)
@@ -67,21 +71,48 @@ def create_app() -> Flask:
     @app.route("/", methods=["GET", "POST"])
     def index():
         if request.method == "POST":
-            target = request.form.get("target", "")
+            target = request.form.get("target", "").strip()
             expected_ip = request.form.get("expected_ip") or None
             hostname = request.form.get("hostname") or None
             evidence_level = request.form.get("evidence_level", "low")
+            authorization = request.form.get("authorization") == "on"
             ports_raw = request.form.get("ports", "")
             ports = (
                 [int(p.strip()) for p in ports_raw.split(",") if p.strip()]
                 if ports_raw
                 else None
             )
+
+            if not authorization:
+                flash(
+                    (
+                        "You must confirm 'I have authorization to scan this target' "
+                        "before running a scan."
+                    ),
+                    "error",
+                )
+                return render_template("index.html")
+
             try:
                 validate_target(target, expected_ip=expected_ip)
             except Exception as exc:  # pragma: no cover - input validation
                 flash(str(exc), "error")
                 return render_template("index.html")
+
+            try:
+                profile = profile_for_evidence(evidence_level)
+            except ValueError as exc:
+                flash(str(exc), "error")
+                return render_template("index.html")
+
+            network_like = (
+                any(symbol in target for symbol in ("/", "*")) or "," in target
+            )
+            if network_like:
+                LOGGER.info(
+                    "ui.scan.wide_scope",
+                    extra={"event": "ui.scan.wide_scope", "target": target},
+                )
 
             try:
                 LOGGER.info(
@@ -93,6 +124,7 @@ def create_app() -> Flask:
                         "ports": ports,
                         "expected_ip": expected_ip,
                         "evidence_level": evidence_level,
+                        "profile": profile.as_dict(),
                     },
                 )
                 report = run_recon(
@@ -101,6 +133,7 @@ def create_app() -> Flask:
                     ports=ports,
                     expected_ip=expected_ip,
                     evidence_level=evidence_level,
+                    profile=profile,
                 )
             except ReconError as exc:
                 flash(str(exc), "error")
@@ -121,7 +154,9 @@ def create_app() -> Flask:
                     "event": "ui.scan.completed",
                     "target": target,
                     "report_id": persisted.report_id,
-                    "open_ports": report.get("open_ports", []),
+                    "open_ports": report.get("artifacts", {})
+                    .get("tcp", {})
+                    .get("open_ports", []),
                 },
             )
             return redirect(url_for("report_detail", report_id=persisted.report_id))

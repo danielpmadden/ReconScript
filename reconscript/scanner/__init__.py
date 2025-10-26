@@ -1,19 +1,19 @@
-"""Scanning primitives for ReconScript with strict rate limiting."""
+# Authorized testing only — do not scan targets without explicit permission.
+# This tool is non-intrusive by default and will not perform exploitation or credentialed checks.
+"""Scanner primitives for ReconScript safe, non-intrusive reconnaissance."""
 
 from __future__ import annotations
 
-import json
+import contextlib
 import logging
-import os
-import random
+import re
+import shutil
 import socket
-import ssl
-import time
-from collections.abc import Iterable, Sequence
+from collections import defaultdict
+from collections.abc import Iterable, Mapping, MutableMapping, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
-from http.cookies import CookieError, SimpleCookie
-from typing import Dict, List, Optional, Tuple
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 
 import requests
 from requests import Response
@@ -23,49 +23,167 @@ from .throttle import TokenBucket
 
 LOGGER = logging.getLogger(__name__)
 
-DEFAULT_PORTS: Tuple[int, ...] = (80, 443, 8080, 8443, 8000, 3000)
-HTTP_PORTS: Tuple[int, ...] = DEFAULT_PORTS
-USER_AGENT = "ReconScript/secure"
+WHOIS_SAFE_PATTERN = re.compile(r"^[A-Za-z0-9.-]{1,253}$")
 
-TOKEN_RATE = float(os.environ.get("TOKEN_RATE", "5"))
-TOKEN_CAPACITY = float(os.environ.get("TOKEN_CAPACITY", "10"))
-HTTP_WORKERS = int(os.environ.get("HTTP_WORKERS", "2"))
-CONNECT_TIMEOUT = float(os.environ.get("CONNECT_TIMEOUT", "5"))
-READ_TIMEOUT = float(os.environ.get("READ_TIMEOUT", "10"))
-MAX_HTTP_RETRIES = int(os.environ.get("MAX_HTTP_RETRIES", "3"))
+PRIORITY_TCP_PORTS: tuple[int, ...] = (
+    80,
+    443,
+    22,
+    21,
+    25,
+    110,
+    143,
+    53,
+    123,
+    3389,
+    5900,
+    8080,
+    8443,
+    8000,
+    3306,
+    5432,
+    6379,
+    27017,
+    5985,
+    9200,
+)
+DEFAULT_TCP_PORTS: tuple[int, ...] = PRIORITY_TCP_PORTS
+DEFAULT_UDP_PORTS: tuple[int, ...] = (53, 123, 161)
+HTTP_PORTS: tuple[int, ...] = (80, 443, 8080, 8443, 8000, 3000)
+DIR_ENUM_LEVELS = {"none", "low", "medium"}
+MAX_RAW_SNIPPET = 400
 
-DEFAULT_REDACTIONS = {
-    "cookie",
-    "authorization",
-    "set-cookie",
-    "x-api-key",
-    "x-auth-token",
+DEFAULT_TIMEOUTS: Mapping[str, float] = {
+    "tcp_connect": 2.5,
+    "tcp_syn": 2.5,
+    "udp": 2.0,
+    "http": 5.0,
+    "dns": 3.0,
 }
 
-_env_redactions = {
-    entry.strip().lower()
-    for entry in os.environ.get("REDACT_KEYS", "").split(",")
-    if entry.strip()
+DEFAULT_RATE_LIMITS: Mapping[str, tuple[float, float]] = {
+    "tcp": (5.0, 5.0),
+    "udp": (2.0, 2.0),
+    "dns": (2.0, 2.0),
+    "http": (2.0, 2.0),
 }
-REDACTION_KEYS = DEFAULT_REDACTIONS | _env_redactions
+
+SAFE_WORDLIST_LOW: tuple[str, ...] = (
+    "robots.txt",
+    "sitemap.xml",
+    "admin",
+    "login",
+    "static",
+    "health",
+    "status",
+)
+SAFE_WORDLIST_MEDIUM: tuple[str, ...] = SAFE_WORDLIST_LOW + (
+    ".well-known/security.txt",
+    "server-status",
+    "config",
+    "api",
+    "assets",
+    "dashboard",
+    "docs",
+)
 
 
-@dataclass(frozen=True)
-class ScanConfig:
-    target: str
-    hostname: Optional[str]
-    ports: Sequence[int]
-    enable_ipv6: bool
-    evidence_level: str
-    redaction_keys: set[str]
-    connect_timeout: float = CONNECT_TIMEOUT
-    read_timeout: float = READ_TIMEOUT
-    http_workers: int = HTTP_WORKERS
-    max_retries: int = MAX_HTTP_RETRIES
+@dataclass
+class ReconProfile:
+    """Profile encapsulating the safe scanning parameters."""
+
+    name: str
+    max_tcp_ports: int = 100
+    tcp_concurrency: int = 10
+    udp_pass: bool = True
+    dns_active: bool = True
+    dns_passive: bool = True
+    dir_enum: str = "low"
+    allow_credentialed: bool = False
+    timeouts: MutableMapping[str, float] = field(
+        default_factory=lambda: dict(DEFAULT_TIMEOUTS)
+    )
+    rate_limits: MutableMapping[str, tuple[float, float]] = field(
+        default_factory=lambda: dict(DEFAULT_RATE_LIMITS)
+    )
+
+    def __post_init__(self) -> None:
+        if self.max_tcp_ports <= 0:
+            raise ValueError("max_tcp_ports must be positive")
+        if self.tcp_concurrency <= 0:
+            raise ValueError("tcp_concurrency must be positive")
+        if self.dir_enum not in DIR_ENUM_LEVELS:
+            raise ValueError(f"dir_enum must be one of {sorted(DIR_ENUM_LEVELS)}")
+        normalized_timeouts = dict(DEFAULT_TIMEOUTS)
+        normalized_timeouts.update(self.timeouts)
+        self.timeouts = normalized_timeouts
+        normalized_rates = dict(DEFAULT_RATE_LIMITS)
+        normalized_rates.update(self.rate_limits)
+        self.rate_limits = normalized_rates
+        if self.allow_credentialed:
+            LOGGER.warning(
+                "Credentialed scanning remains disabled despite profile flag."
+            )
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "name": self.name,
+            "max_tcp_ports": self.max_tcp_ports,
+            "tcp_concurrency": self.tcp_concurrency,
+            "udp_pass": self.udp_pass,
+            "dns_active": self.dns_active,
+            "dns_passive": self.dns_passive,
+            "dir_enum": self.dir_enum,
+            "allow_credentialed": self.allow_credentialed,
+            "timeouts": dict(self.timeouts),
+            "rate_limits": {
+                key: {"rate": rate, "burst": burst}
+                for key, (rate, burst) in self.rate_limits.items()
+            },
+        }
+
+    def limit_ports(self, ports: Sequence[int] | None) -> tuple[int, ...]:
+        candidate_ports = (
+            validate_port_list(ports) if ports is not None else DEFAULT_TCP_PORTS
+        )
+        prioritized: list[int] = []
+        for port in PRIORITY_TCP_PORTS:
+            if port in candidate_ports and port not in prioritized:
+                prioritized.append(port)
+        for port in candidate_ports:
+            if port not in prioritized:
+                prioritized.append(port)
+        return tuple(prioritized[: self.max_tcp_ports])
 
 
-def validate_port_list(ports: Iterable[int]) -> Tuple[int, ...]:
-    validated: List[int] = []
+def profile_for_evidence(evidence_level: str) -> ReconProfile:
+    level = evidence_level.lower()
+    if level not in {"low", "medium", "high"}:
+        raise ValueError("Evidence level must be low, medium, or high")
+    if level == "low":
+        return ReconProfile(
+            name="safe-low",
+            max_tcp_ports=80,
+            tcp_concurrency=6,
+            dir_enum="low",
+        )
+    if level == "medium":
+        return ReconProfile(
+            name="safe-medium",
+            max_tcp_ports=120,
+            tcp_concurrency=8,
+            dir_enum="medium",
+        )
+    return ReconProfile(
+        name="safe-high",
+        max_tcp_ports=150,
+        tcp_concurrency=10,
+        dir_enum="none",
+    )
+
+
+def validate_port_list(ports: Iterable[int]) -> tuple[int, ...]:
+    validated: list[int] = []
     for port in ports:
         if not isinstance(port, int):
             raise TypeError("Ports must be integers.")
@@ -76,47 +194,37 @@ def validate_port_list(ports: Iterable[int]) -> Tuple[int, ...]:
     return tuple(validated)
 
 
-def resolve_addresses(
-    target: str, enable_ipv6: bool
-) -> List[Tuple[int, int, int, str, Tuple[str, int]]]:
-    family = socket.AF_UNSPEC if enable_ipv6 else socket.AF_INET
-    try:
-        infos = socket.getaddrinfo(target, None, family=family, type=socket.SOCK_STREAM)
-    except socket.gaierror as exc:
-        raise RuntimeError(f"Unable to resolve target address: {exc}") from exc
-    unique = []
-    seen = set()
-    for info in infos:
-        sockaddr = info[-1]
-        key = (info[0], sockaddr[0])
-        if key in seen:
-            continue
-        seen.add(key)
-        unique.append(info)
-    return unique
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
 
 
-def tcp_connect_scan(config: ScanConfig, bucket: TokenBucket) -> List[int]:
-    LOGGER.info("Commencing TCP connect scan with token bucket rate limiting.")
-    addresses = resolve_addresses(config.target, config.enable_ipv6)
-    open_ports: List[int] = []
-    for port in config.ports:
-        bucket.consume()
-        success = False
-        for family, _, _, _, sockaddr in addresses:
-            host = sockaddr[0]
-            try:
-                with socket.create_connection(
-                    (host, port), timeout=config.connect_timeout
-                ):
-                    success = True
-                    break
-            except (socket.timeout, ConnectionRefusedError, OSError) as exc:
-                LOGGER.debug("Port %s closed on %s (%s)", port, host, exc)
-                continue
-        if success:
-            open_ports.append(port)
-    return open_ports
+def _isoformat(dt: datetime) -> str:
+    return dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _clip_snippet(snippet: str) -> str:
+    if len(snippet) <= MAX_RAW_SNIPPET:
+        return snippet
+    return snippet[: MAX_RAW_SNIPPET - 3] + "..."
+
+
+def _make_finding(
+    *,
+    tool: str,
+    cmdline: str,
+    summary: str,
+    raw_snippet: str,
+    started_at: datetime,
+    completed_at: datetime,
+) -> dict[str, object]:
+    return {
+        "tool": tool,
+        "cmdline": cmdline,
+        "summary": summary,
+        "started_at": _isoformat(started_at),
+        "completed_at": _isoformat(completed_at),
+        "raw_snippet": _clip_snippet(raw_snippet),
+    }
 
 
 def _build_url(hostname: str, port: int) -> str:
@@ -126,13 +234,11 @@ def _build_url(hostname: str, port: int) -> str:
     return f"{scheme}://{hostname}:{port}"
 
 
-def _redact_headers(
-    headers: Dict[str, str], redaction_keys: set[str]
-) -> Dict[str, str]:
-    sanitized: Dict[str, str] = {}
+def _redact_headers(headers: dict[str, str]) -> dict[str, str]:
+    sanitized: dict[str, str] = {}
     for key, value in headers.items():
         lower = key.lower()
-        redact = lower in redaction_keys
+        redact = lower in {"cookie", "authorization", "set-cookie"}
         if lower.startswith("x-") and any(
             token in lower for token in ("auth", "token", "key")
         ):
@@ -141,285 +247,451 @@ def _redact_headers(
     return sanitized
 
 
-def _parse_cookie_flags(response: Response) -> Optional[Dict[str, bool]]:
-    header_values: List[str] = []
-    if hasattr(response.raw, "headers"):
-        raw_headers = response.raw.headers
-        if hasattr(raw_headers, "getlist"):
-            header_values.extend(raw_headers.getlist("Set-Cookie"))  # type: ignore[attr-defined]
-        elif hasattr(raw_headers, "get_all"):
-            header_values.extend(raw_headers.get_all("Set-Cookie"))  # type: ignore[attr-defined]
-    if not header_values:
-        header = response.headers.get("Set-Cookie")
-        if header:
-            header_values.append(header)
-    if not header_values:
-        return None
+def passive_dns_collection(
+    target: str, profile: ReconProfile
+) -> tuple[dict[str, object], list[dict[str, object]]]:
+    metadata: dict[str, object] = {"addresses": [], "aliases": []}
+    findings: list[dict[str, object]] = []
+    if not profile.dns_passive:
+        return metadata, findings
 
-    secure_flag = False
-    httponly_flag = False
-    for value in header_values:
-        cookie = SimpleCookie()
-        try:
-            cookie.load(value)
-        except CookieError:
-            lowered = value.lower()
-            secure_flag = secure_flag or ("secure" in lowered)
-            httponly_flag = httponly_flag or ("httponly" in lowered)
-            continue
-        for morsel in cookie.values():
-            secure_flag = secure_flag or bool(morsel["secure"])
-            httponly_flag = httponly_flag or bool(morsel["httponly"])
-    return {"secure": secure_flag, "httponly": httponly_flag}
-
-
-def check_security_headers(headers: Dict[str, str]) -> Dict[str, object]:
-    required_headers = {
-        "Strict-Transport-Security": "HSTS",
-        "Content-Security-Policy": "CSP",
-        "X-Frame-Options": "Clickjacking protection",
-        "Referrer-Policy": "Referrer policy",
-        "Permissions-Policy": "Permissions policy",
-        "X-Content-Type-Options": "MIME sniffing protection",
-        "X-XSS-Protection": "Legacy XSS filter",
-    }
-
-    present: Dict[str, str] = {}
-    missing: List[str] = []
-    header_keys = {key.lower(): key for key in headers.keys()}
-    for header in required_headers:
-        lowered = header.lower()
-        if lowered in header_keys:
-            present[header] = headers[header_keys[lowered]]
+    started = _utcnow()
+    lines: list[str] = []
+    summary = "Passive DNS lookup executed."
+    try:
+        host, aliases, addresses = socket.gethostbyname_ex(target)
+        metadata["hostname"] = host
+        metadata["aliases"] = aliases
+        metadata["addresses"] = addresses
+        lines.append(f"Host: {host}")
+        if aliases:
+            lines.append("Aliases: " + ", ".join(aliases))
+        if addresses:
+            lines.append("Addresses: " + ", ".join(addresses))
         else:
-            missing.append(header)
-    return {"present": present, "missing": missing}
+            lines.append("No A records discovered.")
+        summary = f"Passive DNS resolved {len(addresses)} address(es)."
+    except socket.gaierror as exc:
+        lines.append(f"DNS resolution failed: {exc}")
+        summary = "Passive DNS resolution failed."
+    completed = _utcnow()
+    findings.append(
+        _make_finding(
+            tool="passive-dns",
+            cmdline=f"passive_dns --target {target}",
+            summary=summary,
+            raw_snippet="\n".join(lines) or "No passive DNS data",
+            started_at=started,
+            completed_at=completed,
+        )
+    )
+
+    whois_lines: list[str] = []
+    whois_summary = "WHOIS lookup skipped."
+    whois_started = _utcnow()
+    try:
+        import subprocess
+
+        if not WHOIS_SAFE_PATTERN.fullmatch(target):
+            whois_lines.append("WHOIS target contains unsupported characters.")
+        else:
+            executable = shutil.which("whois")
+            if executable is None:
+                whois_lines.append("whois binary not available.")
+            else:
+                try:
+                    result = subprocess.run(  # noqa: S603, S607 - sanitized target and explicit binary
+                        [executable, target],
+                        capture_output=True,
+                        text=True,
+                        timeout=profile.timeouts.get("dns", 3.0),
+                        check=False,
+                    )
+                    stdout = result.stdout.strip()
+                    stderr = result.stderr.strip()
+                    if stdout:
+                        whois_lines.append(stdout[:300])
+                    elif stderr:
+                        whois_lines.append(stderr[:300])
+                    else:
+                        whois_lines.append("WHOIS returned no output.")
+                    whois_summary = "WHOIS lookup executed."
+                except subprocess.SubprocessError as exc:
+                    whois_lines.append(f"WHOIS error: {exc}")
+                    whois_summary = "WHOIS lookup encountered an error."
+    except ImportError:
+        whois_lines.append("subprocess module unavailable for WHOIS.")
+    except Exception as exc:  # pragma: no cover - defensive
+        whois_lines.append(f"Unexpected WHOIS error: {exc}")
+        whois_summary = "WHOIS lookup encountered an error."
+    whois_completed = _utcnow()
+    findings.append(
+        _make_finding(
+            tool="passive-dns",
+            cmdline=f"whois {target}",
+            summary=whois_summary,
+            raw_snippet="\n".join(whois_lines) or "No WHOIS data",
+            started_at=whois_started,
+            completed_at=whois_completed,
+        )
+    )
+
+    ct_started = _utcnow()
+    findings.append(
+        _make_finding(
+            tool="passive-dns",
+            cmdline=f"ct-lookup --domain {target}",
+            summary="Certificate transparency lookup not performed (offline mode).",
+            raw_snippet=(
+                "CT log queries require external network access and are disabled in "
+                "the safe default profile."
+            ),
+            started_at=ct_started,
+            completed_at=_utcnow(),
+        )
+    )
+    return metadata, findings
 
 
-def _detect_external_redirect(expected_host: str, response: Response) -> Optional[str]:
-    expected = expected_host.lower()
-    for hop in (*response.history, response):
-        parsed = requests.utils.urlparse(hop.url)
-        host = (parsed.hostname or "").lower()
-        if host and host != expected:
-            return hop.url
-    return None
+def active_dns_sweep(
+    target: str, profile: ReconProfile, bucket: TokenBucket
+) -> tuple[dict[str, list[str]], list[dict[str, object]]]:
+    metadata: dict[str, list[str]] = defaultdict(list)
+    findings: list[dict[str, object]] = []
+    if not profile.dns_active:
+        return metadata, findings
+
+    resolver = None
+    with contextlib.suppress(ImportError):
+        import dns.resolver  # type: ignore
+
+        resolver = dns.resolver.Resolver()
+        resolver.lifetime = profile.timeouts.get("dns", 3.0)
+
+    record_types = ("A", "AAAA", "CNAME", "TXT", "MX")
+    for record_type in record_types:
+        bucket.consume()
+        started = _utcnow()
+        snippet_lines: list[str] = []
+        summary = "Active DNS query executed."
+        try:
+            if record_type in {"A", "AAAA"}:
+                family = socket.AF_INET if record_type == "A" else socket.AF_INET6
+                answers = socket.getaddrinfo(target, None, family=family)
+                seen: list[str] = []
+                for answer in answers:
+                    host = answer[4][0]
+                    if host not in seen:
+                        seen.append(host)
+                if seen:
+                    metadata[record_type].extend(seen)
+                    snippet_lines.append(f"{record_type} records: " + ", ".join(seen))
+                    summary = f"{record_type} query returned {len(seen)} record(s)."
+                else:
+                    snippet_lines.append(f"No {record_type} records discovered.")
+                    summary = f"No {record_type} records discovered."
+            elif resolver is not None:
+                import dns.resolver  # type: ignore
+
+                answers = resolver.resolve(target, record_type)
+                values = [str(item).strip() for item in answers]
+                metadata[record_type].extend(values)
+                snippet_lines.append(
+                    f"{record_type} records: " + ", ".join(values)
+                    if values
+                    else "No records"
+                )
+                summary = f"{record_type} query completed with {len(values)} result(s)."
+            else:
+                summary = f"{record_type} query skipped (dnspython not installed)."
+                snippet_lines.append("dnspython not installed; skipping.")
+        except Exception as exc:
+            snippet_lines.append(f"{record_type} lookup error: {exc}")
+            summary = f"{record_type} query failed."
+        completed = _utcnow()
+        findings.append(
+            _make_finding(
+                tool="dns-active",
+                cmdline=f"dnsquery --type {record_type} --target {target}",
+                summary=summary,
+                raw_snippet="\n".join(snippet_lines) or f"No {record_type} data",
+                started_at=started,
+                completed_at=completed,
+            )
+        )
+    return metadata, findings
+
+
+def udp_scan_pass(
+    target: str,
+    profile: ReconProfile,
+    ports: Sequence[int],
+    bucket: TokenBucket,
+) -> tuple[dict[str, object], list[dict[str, object]]]:
+    metadata: dict[str, object] = {"scanned_ports": list(ports), "responses": {}}
+    findings: list[dict[str, object]] = []
+    if not profile.udp_pass:
+        return metadata, findings
+
+    for port in ports:
+        bucket.consume()
+        started = _utcnow()
+        response_text = ""
+        summary = f"UDP port {port} did not respond."
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+                sock.settimeout(profile.timeouts.get("udp", 2.0))
+                sock.sendto(b"", (target, port))
+                try:
+                    data, _ = sock.recvfrom(128)
+                    response_text = f"Received {len(data)} bytes"
+                    summary = f"UDP port {port} responded with data."
+                    metadata["responses"][port] = "response"
+                except socket.timeout:
+                    response_text = "No UDP response before timeout."
+                    metadata["responses"][port] = "timeout"
+        except OSError as exc:
+            response_text = f"UDP error: {exc}"
+            summary = f"UDP port {port} unreachable."
+            metadata["responses"][port] = "error"
+        completed = _utcnow()
+        findings.append(
+            _make_finding(
+                tool="udp-scan",
+                cmdline=f"udp_probe --target {target} --port {port}",
+                summary=summary,
+                raw_snippet=response_text or "No UDP data returned.",
+                started_at=started,
+                completed_at=completed,
+            )
+        )
+    return metadata, findings
+
+
+def tcp_syn_scan(
+    target: str,
+    profile: ReconProfile,
+    ports: Sequence[int],
+    bucket: TokenBucket,
+) -> tuple[dict[str, object], list[dict[str, object]]]:
+    metadata: dict[str, object] = {
+        "scanned_ports": list(ports),
+        "open_ports": [],
+    }
+    if not ports:
+        return metadata, []
+
+    open_ports: list[int] = []
+    errors: list[str] = []
+    started = _utcnow()
+
+    def probe_port(port: int) -> None:
+        bucket.consume()
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.settimeout(profile.timeouts.get("tcp_syn", 2.5))
+                result = sock.connect_ex((target, port))
+                if result == 0:
+                    open_ports.append(port)
+        except OSError as exc:
+            errors.append(f"{port}:{exc}")
+
+    with ThreadPoolExecutor(max_workers=profile.tcp_concurrency) as executor:
+        futures = [executor.submit(probe_port, port) for port in ports]
+        for future in as_completed(futures):
+            future.result()
+    metadata["open_ports"] = sorted(open_ports)
+    summary = f"TCP SYN scan completed. Open ports: {', '.join(map(str, open_ports)) or 'none'}."
+    raw_lines = [summary]
+    if errors:
+        raw_lines.append("Errors: " + "; ".join(errors[:5]))
+    completed = _utcnow()
+    findings = [
+        _make_finding(
+            tool="tcp-syn",
+            cmdline=f"tcp_syn_scan --target {target} --ports {','.join(map(str, ports))}",
+            summary=summary,
+            raw_snippet="\n".join(raw_lines),
+            started_at=started,
+            completed_at=completed,
+        )
+    ]
+    return metadata, findings
 
 
 def _http_request(
-    url: str, max_retries: int, connect_timeout: float, read_timeout: float
-) -> Tuple[Optional[Response], Optional[str]]:
-    headers = {"User-Agent": USER_AGENT}
-    attempt = 0
-    while attempt <= max_retries:
-        try:
-            response = requests.get(
-                url,
-                headers=headers,
-                allow_redirects=True,
-                timeout=(connect_timeout, read_timeout),
-            )
-            return response, None
-        except requests_exceptions.RequestException as exc:
-            if attempt >= max_retries:
-                return None, str(exc)
-            sleep = min(4.0, (2**attempt) * 0.5)
-            jitter = random.uniform(0, 0.25)
-            time.sleep(sleep + jitter)
-            attempt += 1
-    return None, "unreachable"
-
-
-def _http_probe_single(
-    config: ScanConfig,
-    hostname: str,
-    port: int,
-) -> Dict[str, object]:
-    url = _build_url(hostname, port)
-    response, error = _http_request(
-        url, config.max_retries, config.connect_timeout, config.read_timeout
+    method: str,
+    url: str,
+    profile: ReconProfile,
+    bucket: TokenBucket,
+    *,
+    allow_redirects: bool = True,
+) -> tuple[Response | None, str | None]:
+    headers = {"User-Agent": "ReconScript/safe"}
+    timeout = (
+        profile.timeouts.get("http", 5.0),
+        profile.timeouts.get("http", 5.0),
     )
-    if error:
-        LOGGER.debug("HTTP probe for %s failed: %s", url, error)
-        return {"error": error}
-
-    assert response is not None
-
-    redirect = _detect_external_redirect(hostname, response)
-    if redirect:
-        LOGGER.warning("Blocked redirect from %s to external host %s", url, redirect)
-        return {"error": "redirected externally", "redirect_url": redirect}
-
-    headers = dict(response.headers)
-    sanitized_headers = _redact_headers(headers, config.redaction_keys)
-    metadata: Dict[str, object] = {
-        "url": response.url,
-        "status_code": response.status_code,
-        "headers": sanitized_headers,
-    }
-    cookie_flags = _parse_cookie_flags(response)
-    if cookie_flags:
-        metadata["cookie_flags"] = cookie_flags
-    metadata["security_headers_check"] = check_security_headers(sanitized_headers)
-
-    if config.evidence_level == "low":
-        return metadata
-
-    metadata["screenshots"] = []
-    if config.evidence_level == "medium":
-        return metadata
-
-    request_info = response.request
-    metadata["raw_request"] = {
-        "method": request_info.method,
-        "headers": dict(request_info.headers),
-        "body": (
-            request_info.body.decode("utf-8", errors="replace")
-            if isinstance(request_info.body, bytes)
-            else request_info.body
-        ),
-    }
-    metadata["raw_response"] = {
-        "status_code": response.status_code,
-        "headers": headers,
-        "body": response.text,
-    }
-    return metadata
-
-
-def http_probe_services(
-    config: ScanConfig, hostname: str, ports: Sequence[int]
-) -> Dict[int, Dict[str, object]]:
-    results: Dict[int, Dict[str, object]] = {}
-    http_ports = list(ports)
-    if not http_ports:
-        return results
-
-    with ThreadPoolExecutor(max_workers=config.http_workers) as executor:
-        future_map = {
-            executor.submit(_http_probe_single, config, hostname, port): port
-            for port in http_ports
-        }
-        for future in as_completed(future_map):
-            port = future_map[future]
-            try:
-                results[port] = future.result()
-            except Exception as exc:  # pragma: no cover - defensive guard
-                LOGGER.error(
-                    "HTTP probe for port %s raised unexpected error: %s", port, exc
-                )
-                results[port] = {"error": str(exc)}
-    return results
-
-
-def fetch_tls_certificate(config: ScanConfig, port: int) -> Dict[str, object]:
-    context = ssl.create_default_context()
-    context.check_hostname = False
-    addresses = resolve_addresses(config.target, config.enable_ipv6)
-    for family, _, _, _, sockaddr in addresses:
-        host = sockaddr[0]
-        try:
-            with socket.create_connection(
-                (host, port), timeout=config.connect_timeout
-            ) as sock:
-                with context.wrap_socket(
-                    sock, server_hostname=config.hostname or config.target
-                ) as wrapped:
-                    certificate = wrapped.getpeercert()
-                    if not certificate:
-                        continue
-                    return {
-                        "subject": dict(
-                            entry[0] for entry in certificate.get("subject", [])
-                        ),
-                        "issuer": dict(
-                            entry[0] for entry in certificate.get("issuer", [])
-                        ),
-                        "notBefore": certificate.get("notBefore"),
-                        "notAfter": certificate.get("notAfter"),
-                        "serialNumber": certificate.get("serialNumber"),
-                    }
-        except (ssl.SSLError, socket.timeout, ConnectionError, OSError) as error:
-            LOGGER.debug("TLS retrieval failed on %s:%s: %s", host, port, error)
-            continue
-    return {"error": "unable to retrieve TLS certificate"}
-
-
-def fetch_robots(config: ScanConfig, hostname: str) -> Dict[str, object]:
-    for scheme in ("https", "http"):
-        url = f"{scheme}://{hostname}/robots.txt"
-        response, error = _http_request(
-            url, config.max_retries, config.connect_timeout, config.read_timeout
+    bucket.consume()
+    try:
+        response = requests.request(
+            method,
+            url,
+            headers=headers,
+            allow_redirects=allow_redirects,
+            timeout=timeout,
         )
+        return response, None
+    except requests_exceptions.RequestException as exc:
+        return None, str(exc)
+
+
+def http_checks(
+    target: str,
+    hostname: str,
+    ports: Sequence[int],
+    profile: ReconProfile,
+    bucket: TokenBucket,
+) -> tuple[dict[str, object], list[dict[str, object]]]:
+    metadata: dict[str, object] = {"services": {}}
+    findings: list[dict[str, object]] = []
+    http_ports = [port for port in ports if port in HTTP_PORTS]
+    for port in http_ports:
+        url = _build_url(hostname, port)
+        started = _utcnow()
+        response, error = _http_request("GET", url, profile, bucket)
+        completed = _utcnow()
+        if error:
+            findings.append(
+                _make_finding(
+                    tool="http",
+                    cmdline=f"http-get {url}",
+                    summary=f"HTTP GET failed for {url}",
+                    raw_snippet=error,
+                    started_at=started,
+                    completed_at=completed,
+                )
+            )
+            metadata["services"][port] = {"error": error}
+            continue
+        assert response is not None
+        headers = _redact_headers(dict(response.headers))
+        metadata["services"][port] = {
+            "url": response.url,
+            "status_code": response.status_code,
+            "headers": headers,
+        }
+        findings.append(
+            _make_finding(
+                tool="http",
+                cmdline=f"http-get {url}",
+                summary=f"HTTP {response.status_code} received from {url}",
+                raw_snippet=f"Status {response.status_code}; {len(response.text)} bytes",
+                started_at=started,
+                completed_at=completed,
+            )
+        )
+        head_started = _utcnow()
+        head_response, head_error = _http_request("HEAD", url, profile, bucket)
+        head_completed = _utcnow()
+        if head_error:
+            findings.append(
+                _make_finding(
+                    tool="http",
+                    cmdline=f"http-head {url}",
+                    summary=f"HTTP HEAD failed for {url}",
+                    raw_snippet=head_error,
+                    started_at=head_started,
+                    completed_at=head_completed,
+                )
+            )
+        else:
+            assert head_response is not None
+            findings.append(
+                _make_finding(
+                    tool="http",
+                    cmdline=f"http-head {url}",
+                    summary=f"HTTP HEAD returned {head_response.status_code}",
+                    raw_snippet="Headers only response recorded.",
+                    started_at=head_started,
+                    completed_at=head_completed,
+                )
+            )
+        if profile.dir_enum in {"low", "medium"}:
+            dir_findings = _directory_enum(url, profile, bucket)
+            findings.extend(dir_findings)
+    return metadata, findings
+
+
+def _directory_enum(
+    base_url: str, profile: ReconProfile, bucket: TokenBucket
+) -> list[dict[str, object]]:
+    findings: list[dict[str, object]] = []
+    if profile.dir_enum == "none":
+        return findings
+    wordlist = list(
+        SAFE_WORDLIST_LOW if profile.dir_enum == "low" else SAFE_WORDLIST_MEDIUM
+    )
+    if profile.dir_enum == "medium":
+        combos = [
+            "admin/login",
+            "admin/config",
+            "api/v1",
+            "api/status",
+        ]
+        wordlist.extend(combos)
+    wordlist = wordlist[:200]
+    discovered: list[str] = []
+    for path in wordlist:
+        url = base_url.rstrip("/") + "/" + path
+        response, error = _http_request("HEAD", url, profile, bucket)
         if error:
             continue
         assert response is not None
-        redirect = _detect_external_redirect(hostname, response)
-        if redirect:
-            continue
-        if response.status_code == 200 and response.text.strip():
-            body = (
-                response.text
-                if config.evidence_level == "high"
-                else response.text[:2000]
+        if response.status_code < 400:
+            discovered.append(f"{path} ({response.status_code})")
+    if discovered:
+        findings.append(
+            _make_finding(
+                tool="http-dir-enum",
+                cmdline=f"dir-enum --base {base_url} --level {profile.dir_enum}",
+                summary=f"Directory enumeration discovered {len(discovered)} path(s).",
+                raw_snippet=", ".join(discovered),
+                started_at=_utcnow(),
+                completed_at=_utcnow(),
             )
-            return {"url": response.url, "body": body}
-    return {"note": "robots.txt not present or inaccessible"}
-
-
-def generate_findings(
-    http_results: Dict[int, Dict[str, object]],
-) -> List[Dict[str, object]]:
-    findings: List[Dict[str, object]] = []
-    for port, result in http_results.items():
-        headers = result.get("security_headers_check")
-        if isinstance(headers, dict):
-            missing = headers.get("missing", [])
-            if missing:
-                findings.append(
-                    {
-                        "port": port,
-                        "issue": "missing_security_headers",
-                        "details": missing,
-                    }
-                )
-        cookie_flags = result.get("cookie_flags")
-        if isinstance(cookie_flags, dict) and (
-            not cookie_flags.get("secure") or not cookie_flags.get("httponly")
-        ):
-            findings.append(
-                {"port": port, "issue": "session_cookie_flags", "details": cookie_flags}
+        )
+    else:
+        findings.append(
+            _make_finding(
+                tool="http-dir-enum",
+                cmdline=f"dir-enum --base {base_url} --level {profile.dir_enum}",
+                summary="Directory enumeration completed with no findings.",
+                raw_snippet="No accessible directories identified within safe wordlist.",
+                started_at=_utcnow(),
+                completed_at=_utcnow(),
             )
-        status_code = result.get("status_code")
-        if isinstance(status_code, int) and status_code >= 500:
-            findings.append(
-                {"port": port, "issue": "server_error", "details": status_code}
-            )
+        )
     return findings
 
 
-def serialize_results(data: Dict[str, object]) -> str:
+def serialize_results(data: dict[str, object]) -> str:
+    import json
+
     return json.dumps(data, indent=2, sort_keys=True)
 
 
 __all__ = [
-    "DEFAULT_PORTS",
+    "DEFAULT_TCP_PORTS",
+    "DEFAULT_UDP_PORTS",
     "HTTP_PORTS",
-    "TOKEN_RATE",
-    "TOKEN_CAPACITY",
-    "HTTP_WORKERS",
-    "CONNECT_TIMEOUT",
-    "READ_TIMEOUT",
-    "MAX_HTTP_RETRIES",
-    "REDACTION_KEYS",
-    "ScanConfig",
-    "validate_port_list",
-    "resolve_addresses",
-    "tcp_connect_scan",
-    "http_probe_services",
-    "fetch_tls_certificate",
-    "fetch_robots",
-    "generate_findings",
-    "check_security_headers",
+    "ReconProfile",
+    "active_dns_sweep",
+    "http_checks",
+    "passive_dns_collection",
+    "profile_for_evidence",
     "serialize_results",
+    "tcp_syn_scan",
+    "udp_scan_pass",
+    "validate_port_list",
 ]

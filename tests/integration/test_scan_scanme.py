@@ -1,3 +1,5 @@
+# Authorized testing only — do not scan targets without explicit permission.
+# This tool is non-intrusive by default and will not perform exploitation or credentialed checks.
 from __future__ import annotations
 
 import os
@@ -14,4 +16,5 @@ from reconscript.core import run_recon
 )
 def test_scan_scanme() -> None:
     report = run_recon(target="scanme.nmap.org", evidence_level="low")
-    assert "open_ports" in report
+    assert "artifacts" in report
+    assert "findings" in report
